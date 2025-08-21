@@ -625,4 +625,9 @@ app.get('/api/pdf/:id', async (req, res) => {
         res.status(500).json({ error: 'Error fetching PDF' });
     }
 });
-      
+
+// Health Check Route
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'Server is running', timestamp: new Date() });
+});
+
