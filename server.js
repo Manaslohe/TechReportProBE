@@ -510,6 +510,10 @@ app.get('/api/admin/dashboard', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Calculate timestamp for 24 hours ago
+    const last24Hours = new Date();
+    last24Hours.setHours(last24Hours.getHours() - 24);
+
     // Fetch total counts
     const totalUsers = await User.countDocuments();
     const totalReports = await Report.countDocuments();
@@ -517,6 +521,12 @@ app.get('/api/admin/dashboard', verifyToken, async (req, res) => {
     const pendingRequests = await PaymentRequest.countDocuments({ status: 'pending' });
     const totalContacts = await Contact.countDocuments();
     const unreadContacts = await Contact.countDocuments({ isRead: false });
+
+    // Fetch last 24 hours data
+    const newUsers24h = await User.countDocuments({ createdAt: { $gte: last24Hours } });
+    const newReports24h = await Report.countDocuments({ uploadDate: { $gte: last24Hours } });
+    const newRequests24h = await PaymentRequest.countDocuments({ createdAt: { $gte: last24Hours } });
+    const newContacts24h = await Contact.countDocuments({ submittedAt: { $gte: last24Hours } });
 
     // Fetch recent data
     const recentUsers = await User.find().sort('-createdAt').limit(5).select('firstName lastName email createdAt');
@@ -549,6 +559,12 @@ app.get('/api/admin/dashboard', verifyToken, async (req, res) => {
       recentUsers,
       recentRequests,
       popularReports,
+      last24h: {
+        users: newUsers24h,
+        reports: newReports24h,
+        requests: newRequests24h,
+        contacts: newContacts24h
+      }
     });
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
@@ -612,6 +628,13 @@ app.get('/api/pdf/:id', async (req, res) => {
 
         const { download } = req.query;
         const isDownload = download === '1' || download === 'true';
+
+        // Set security headers to help with browser preview issues
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'self'; object-src 'self'; frame-src 'self'");
+        res.setHeader('Access-Control-Allow-Origin', '*'); // Consider restricting this in production
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
 
         const safeName = `${(report.title || 'report').replace(/[^a-z0-9_\-]+/gi, '_')}.pdf`;
         res.setHeader('Content-Type', report.pdf.contentType || 'application/pdf');
