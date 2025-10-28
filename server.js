@@ -16,7 +16,11 @@ const PORT = process.env.PORT || 5000;
 const DB_URI = process.env.DB_URI;
 
 // Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173', 'https://techbe-zeta.vercel.app'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:5173', 
+    'https://techreportspro.vercel.app', // Add your frontend's production URL
+    'https://techbe-zeta.vercel.app' // Add any other relevant URLs
+];
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || allowedOrigins.includes(origin)) {
