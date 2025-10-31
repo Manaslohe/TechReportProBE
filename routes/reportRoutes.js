@@ -73,7 +73,7 @@ const checkReportAccess = async (userId, reportId, reportType = 'premium') => {
 // Upload Report
 router.post('/', upload.single('file'), async (req, res) => {
     const { originalname, mimetype, size } = req.file;
-    const { title, description, sector, isFree } = req.body;
+    const { title, description, sector, isFree, uploadDate } = req.body;
 
     // Validation
     if (!title || !description || !sector || !originalname || !mimetype || !size) {
@@ -91,6 +91,7 @@ router.post('/', upload.single('file'), async (req, res) => {
             description,
             sector,
             isFree: isFree === 'true' || isFree === true,
+            uploadDate: uploadDate ? new Date(uploadDate) : new Date(), // Use provided date or default to now
             pdf: {
                 data: req.file.buffer,
                 contentType: mimetype,
