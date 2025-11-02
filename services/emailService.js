@@ -3,23 +3,53 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter
-const mailTransporter = nodemailer.createTransport({
-	host: process.env.SMTP_HOST || 'smtp.gmail.com',
-	port: Number(process.env.SMTP_PORT) || 465,
-	secure: String(process.env.SMTP_SECURE || 'true') === 'true',
-	auth: {
-		user: process.env.SMTP_USER,
-		pass: process.env.SMTP_PASS
-	}
-});
+// Log email configuration (without sensitive data) on startup
+console.log('📧 Email Service Configuration:');
+console.log(`   SMTP_HOST: ${process.env.SMTP_HOST}`);
+console.log(`   SMTP_PORT: ${process.env.SMTP_PORT}`);
+console.log(`   SMTP_SECURE: ${process.env.SMTP_SECURE}`);
+console.log(`   SMTP_USER: ${process.env.SMTP_USER ? '✓ Set' : '✗ Missing'}`);
+console.log(`   SMTP_PASS: ${process.env.SMTP_PASS ? '✓ Set' : '✗ Missing'}`);
+console.log(`   MAIL_FROM_NAME: ${process.env.MAIL_FROM_NAME}`);
+console.log(`   MAIL_FROM_EMAIL: ${process.env.MAIL_FROM_EMAIL}`);
 
-// Verify transporter
-mailTransporter.verify().then(() => {
-	console.log('Email service ready');
-}).catch((err) => {
-	console.error('Email service error:', err?.message || err);
-});
+// Create transporter with better configuration
+const createTransporter = () => {
+	try {
+		const transporter = nodemailer.createTransport({
+			host: process.env.SMTP_HOST || 'smtp.gmail.com',
+			port: Number(process.env.SMTP_PORT) || 465,
+			secure: String(process.env.SMTP_SECURE || 'true') === 'true',
+			auth: {
+				user: process.env.SMTP_USER,
+				pass: process.env.SMTP_PASS
+			},
+			debug: process.env.NODE_ENV !== 'production',
+			logger: process.env.NODE_ENV !== 'production',
+			// Improved TLS settings
+			tls: {
+				rejectUnauthorized: true,
+				minVersion: 'TLSv1.2'
+			}
+		});
+
+		// Verify connection
+		transporter.verify((error, success) => {
+			if (error) {
+				console.error('❌ [EMAIL] Connection verification failed:', error.message);
+			} else {
+				console.log('✅ [EMAIL] Email service is ready to send emails');
+			}
+		});
+
+		return transporter;
+	} catch (error) {
+		console.error('❌ [EMAIL] Failed to create transporter:', error.message);
+		throw error;
+	}
+};
+
+const mailTransporter = createTransporter();
 
 // Helper to escape HTML
 const htmlEscape = (s = '') =>
@@ -31,6 +61,14 @@ const buildWelcomeEmailHtml = ({ firstName, lastName }) => {
 	return `
 		<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;background:#f6f9fc;padding:20px">
 			<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
+				<!-- ADD: Spam folder notice at the top -->
+				<div style="background:#fff3cd;border-left:4px solid #ffc107;padding:12px 20px;margin:20px;border-radius:8px;text-align:center">
+					<p style="color:#856404;font-size:13px;margin:0;line-height:1.6">
+						<strong>📧 Can't find this email?</strong><br>
+						Check your <strong>Spam/Junk</strong> folder and mark as "Not Spam"
+					</p>
+				</div>
+				
 				<!-- Header with gradient -->
 				<div style="background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#fff;padding:40px 20px;text-align:center">
 					<h1 style="margin:0;font-size:32px;font-weight:bold;letter-spacing:-0.5px">Welcome to MarketMinds!</h1>
@@ -70,9 +108,9 @@ const buildWelcomeEmailHtml = ({ firstName, lastName }) => {
 						</ul>
 					</div>
 					
-					<!-- CTA Button -->
+					<!-- CTA Button - Updated URL -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://techreportspro.vercel.app/signin" 
+						<a href="https://www.marketmindsresearch.com/signin" 
 						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							Get Started Now
 						</a>
@@ -87,10 +125,10 @@ const buildWelcomeEmailHtml = ({ firstName, lastName }) => {
 				<!-- Footer -->
 				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
 					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
-						© ${new Date().getFullYear()} MarketMinds. All rights reserved.
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
 					</p>
 					<div style="margin:15px 0 0 0">
-						<a href="https://techreportspro.vercel.app" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
 						<span style="color:#d1d5db">|</span>
 						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">WhatsApp</a>
 						<span style="color:#d1d5db">|</span>
@@ -193,10 +231,10 @@ const buildOTPEmailHtml = ({ firstName, lastName, otp }) => {
 				<!-- Footer -->
 				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
 					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
-						© ${new Date().getFullYear()} MarketMinds. All rights reserved.
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
 					</p>
 					<div style="margin:15px 0 0 0">
-						<a href="https://techreportspro.vercel.app" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
 						<span style="color:#d1d5db">|</span>
 						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Support</a>
 					</div>
@@ -268,10 +306,10 @@ const buildPasswordResetSuccessHtml = ({ firstName, lastName }) => {
 				<!-- Footer -->
 				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
 					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
-						© ${new Date().getFullYear()} MarketMinds. All rights reserved.
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
 					</p>
 					<div style="margin:15px 0 0 0">
-						<a href="https://techreportspro.vercel.app" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
 						<span style="color:#d1d5db">|</span>
 						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Support</a>
 					</div>
@@ -421,10 +459,10 @@ const buildPurchaseApprovalHtml = ({ firstName, lastName, purchaseType, itemName
 				<!-- Footer -->
 				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
 					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
-						© ${new Date().getFullYear()} MarketMinds. All rights reserved.
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
 					</p>
 					<div style="margin:15px 0 0 0">
-						<a href="https://techreportspro.vercel.app" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
 						<span style="color:#d1d5db">|</span>
 						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Support</a>
 					</div>
@@ -434,29 +472,143 @@ const buildPurchaseApprovalHtml = ({ firstName, lastName, purchaseType, itemName
 	`;
 };
 
-// Send welcome email
+// Build subscription report access email HTML
+const buildSubscriptionReportAccessHtml = ({ firstName, lastName, reportTitle, reportSector, remainingReports }) => {
+	const fullName = `${firstName} ${lastName}`.trim();
+	return `
+		<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;background:#f6f9fc;padding:20px">
+			<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
+				<!-- Header -->
+				<div style="background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#fff;padding:40px 20px;text-align:center">
+					<div style="width:64px;height:64px;margin:0 auto 15px;background:#ffffff;border-radius:50%;display:flex;align-items:center;justify-content:center">
+						<span style="font-size:32px">📊</span>
+					</div>
+					<h1 style="margin:0;font-size:28px;font-weight:bold">Report Unlocked!</h1>
+				</div>
+				
+				<!-- Main content -->
+				<div style="padding:40px 30px">
+					<h2 style="color:#1f2937;font-size:22px;margin:0 0 20px 0;font-weight:600">
+						Hello ${htmlEscape(fullName)}! 🎉
+					</h2>
+					
+					<p style="color:#4b5563;font-size:16px;line-height:1.8;margin:0 0 25px 0">
+						Great news! You've successfully unlocked a new report using your subscription.
+					</p>
+					
+					<!-- Report Details -->
+					<div style="background:#f3f4f6;border-radius:12px;padding:25px;margin:0 0 30px 0;border:2px solid #e5e7eb">
+						<h3 style="color:#1f2937;font-size:18px;margin:0 0 15px 0;font-weight:600">Report Details</h3>
+						<table style="width:100%;border-collapse:collapse">
+							<tr>
+								<td style="padding:8px 0;color:#666;font-weight:bold">Report Title</td>
+								<td style="padding:8px 0;color:#111">${htmlEscape(reportTitle)}</td>
+							</tr>
+							<tr>
+								<td style="padding:8px 0;color:#666;font-weight:bold">Sector</td>
+								<td style="padding:8px 0;color:#111">${htmlEscape(reportSector)}</td>
+							</tr>
+							<tr>
+								<td style="padding:8px 0;color:#666;font-weight:bold">Access Type</td>
+								<td style="padding:8px 0;color:#111">Via Subscription</td>
+							</tr>
+						</table>
+					</div>
+					
+					<div style="background:#dbeafe;border-left:4px solid #0b5bd3;padding:20px;margin:0 0 25px 0;border-radius:8px">
+						<p style="color:#1e40af;font-size:15px;margin:0 0 10px 0;font-weight:600">
+							📈 Subscription Status
+						</p>
+						<p style="color:#1e3a8a;font-size:14px;margin:0;line-height:1.6">
+							You have <strong>${remainingReports.total || 0} reports</strong> remaining in your subscription
+							<br/>
+							(${remainingReports.premium || 0} Premium + ${remainingReports.bluechip || 0} Bluechip)
+						</p>
+					</div>
+					
+					<!-- CTA Button -->
+					<div style="text-align:center;margin:0 0 30px 0">
+						<a href="https://techreportspro.vercel.app/dashboard" 
+						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
+							View in Dashboard
+						</a>
+					</div>
+					
+					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0;border-top:1px solid #e5e7eb;padding-top:20px">
+						All your accessed reports are available in your 
+						<a href="https://techreportspro.vercel.app/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">Dashboard</a>.
+					</p>
+					
+					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:15px 0 0 0">
+						Need help? Contact us at 
+						<a href="mailto:info.marketmindsresearch@gmail.com" style="color:#0b5bd3;text-decoration:none;font-weight:600">info.marketmindsresearch@gmail.com</a>
+					</p>
+				</div>
+				
+				<!-- Footer -->
+				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
+					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
+					</p>
+					<div style="margin:15px 0 0 0">
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<span style="color:#d1d5db">|</span>
+						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Support</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+};
+
+// Send welcome email with improved headers
 export const sendWelcomeEmail = async ({ email, firstName, lastName }) => {
 	try {
-		console.log('📧 [EMAIL] Sending welcome email...');
+		console.log('📧 [EMAIL] Attempting to send welcome email...');
 		console.log(`   → To: ${email}`);
 		console.log(`   → Name: ${firstName} ${lastName}`);
+		console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
 		
-		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		// Use custom domain in FROM address
+		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds Research';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
+
+		if (!process.env.SMTP_USER) {
+			throw new Error('SMTP_USER not configured');
+		}
 
 		const mailOptions = {
 			from: `${fromName} <${fromEmail}>`,
+			replyTo: process.env.SMTP_USER, // Reply goes to Gmail
 			to: email,
 			subject: '🎉 Welcome to MarketMinds - Let\'s Get Started!',
-			text: `Hello ${firstName} ${lastName},\n\nWelcome to MarketMinds! We're thrilled to have you on board.\n\nYour account has been successfully created. You can now access our comprehensive market reports and industry insights.\n\nGet started: https://techreportspro.vercel.app/signin\n\nBest regards,\nThe MarketMinds Team`,
-			html: buildWelcomeEmailHtml({ firstName, lastName })
+			text: `Hello ${firstName} ${lastName},\n\nWelcome to MarketMinds! We're thrilled to have you on board.\n\nYour account has been successfully created. You can now access our comprehensive market reports and industry insights.\n\nGet started: https://www.marketmindsresearch.com/signin\n\nBest regards,\nThe MarketMinds Team`,
+			html: buildWelcomeEmailHtml({ firstName, lastName }),
+			// Add headers for better deliverability
+			headers: {
+				'X-Priority': '3',
+				'X-Mailer': 'MarketMinds Mailer v1.0',
+				'List-Unsubscribe': `<mailto:info.marketmindsresearch@gmail.com?subject=Unsubscribe>`,
+				'Precedence': 'bulk',
+				'Organization': 'MarketMinds Research',
+				'X-Entity-Ref-ID': `${Date.now()}-${email.split('@')[0]}`
+			}
 		};
 
-		await mailTransporter.sendMail(mailOptions);
+		console.log(`   → From: ${mailOptions.from}`);
+		console.log(`   → Reply-To: ${mailOptions.replyTo}`);
+		console.log(`   → Subject: ${mailOptions.subject}`);
+		
+		const info = await mailTransporter.sendMail(mailOptions);
 		console.log('✅ [EMAIL] Welcome email sent successfully');
-		return { success: true };
+		console.log(`   → Message ID: ${info.messageId}`);
+		console.log(`   → Response: ${info.response}`);
+		
+		return { success: true, messageId: info.messageId };
 	} catch (error) {
-		console.error('❌ [EMAIL] Welcome email error:', error?.message || error);
+		console.error('❌ [EMAIL] Welcome email error:');
+		console.error(`   → Error: ${error?.message || error}`);
+		console.error(`   → Code: ${error?.code}`);
 		throw error;
 	}
 };
@@ -470,7 +622,7 @@ export const sendContactEmail = async ({ name, email, phone, country, message })
 		console.log(`   → Country: ${country || 'N/A'}`);
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'Contact Form';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
 		const toEmail = process.env.MAIL_TO || process.env.SMTP_USER;
 
 		console.log(`   → Sending to admin: ${toEmail}`);
@@ -502,13 +654,18 @@ export const sendContactEmail = async ({ name, email, phone, country, message })
 // Send OTP email
 export const sendOTPEmail = async ({ email, firstName, lastName, otp }) => {
 	try {
-		console.log('📧 [EMAIL] Sending OTP email...');
+		console.log('📧 [EMAIL] Attempting to send OTP email...');
 		console.log(`   → To: ${email}`);
 		console.log(`   → Name: ${firstName} ${lastName}`);
 		console.log(`   → OTP: ${otp}`);
+		console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
+
+		if (!process.env.SMTP_USER) {
+			throw new Error('SMTP_USER not configured');
+		}
 
 		const mailOptions = {
 			from: `${fromName} <${fromEmail}>`,
@@ -518,11 +675,21 @@ export const sendOTPEmail = async ({ email, firstName, lastName, otp }) => {
 			html: buildOTPEmailHtml({ firstName, lastName, otp })
 		};
 
-		await mailTransporter.sendMail(mailOptions);
+		console.log(`   → From: ${mailOptions.from}`);
+		console.log(`   → Subject: ${mailOptions.subject}`);
+		
+		const info = await mailTransporter.sendMail(mailOptions);
 		console.log('✅ [EMAIL] OTP email sent successfully');
-		return { success: true };
+		console.log(`   → Message ID: ${info.messageId}`);
+		console.log(`   → Response: ${info.response}`);
+		
+		return { success: true, messageId: info.messageId };
 	} catch (error) {
-		console.error('❌ [EMAIL] OTP email error:', error?.message || error);
+		console.error('❌ [EMAIL] OTP email error:');
+		console.error(`   → Error: ${error?.message || error}`);
+		console.error(`   → Code: ${error?.code}`);
+		console.error(`   → Command: ${error?.command}`);
+		console.error(`   → Stack: ${error?.stack}`);
 		throw error;
 	}
 };
@@ -535,7 +702,7 @@ export const sendPasswordResetSuccessEmail = async ({ email, firstName, lastName
 		console.log(`   → Name: ${firstName} ${lastName}`);
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
 
 		const mailOptions = {
 			from: `${fromName} <${fromEmail}>`,
@@ -568,7 +735,7 @@ export const sendPurchaseApprovalEmail = async ({ email, firstName, lastName, pu
 		}
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
 
 		const mailOptions = {
 			from: `${fromName} <${fromEmail}>`,
@@ -598,7 +765,7 @@ export const sendSubscriptionReportAccessEmail = async ({ email, firstName, last
 		console.log(`   → Remaining: ${remainingReports.total} reports (${remainingReports.premium}P + ${remainingReports.bluechip}B)`);
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
+		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
 
 		const mailOptions = {
 			from: `${fromName} <${fromEmail}>`,
@@ -608,15 +775,17 @@ export const sendSubscriptionReportAccessEmail = async ({ email, firstName, last
 			html: buildSubscriptionReportAccessHtml({ firstName, lastName, reportTitle, reportSector, remainingReports })
 		};
 
-		await mailTransporter.sendMail(mailOptions);
+		const info = await mailTransporter.sendMail(mailOptions);
 		console.log('✅ [EMAIL] Subscription report access email sent successfully');
-		return { success: true };
+		console.log(`   → Message ID: ${info.messageId}`);
+		return { success: true, messageId: info.messageId };
 	} catch (error) {
 		console.error('❌ [EMAIL] Subscription report access email error:', error?.message || error);
 		throw error;
 	}
 };
 
+// default export
 export default {
 	sendWelcomeEmail,
 	sendContactEmail,

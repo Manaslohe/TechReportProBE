@@ -37,14 +37,18 @@ router.post('/signup', async (req, res) => {
         const newUser = new User({ firstName, lastName, email, password: hashedPassword });
         await newUser.save();
 
-        // Send welcome email (non-blocking)
+        // Send welcome email with better error handling
+        console.log('📧 [SIGNUP] Attempting to send welcome email to:', email);
         sendWelcomeEmail({ 
             email, 
             firstName, 
             lastName 
+        }).then(() => {
+            console.log('✅ [SIGNUP] Welcome email queued successfully');
         }).catch(err => {
-            console.error('Failed to send welcome email:', err);
-            // Don't fail the signup if email fails
+            console.error('❌ [SIGNUP] Failed to send welcome email:', err.message);
+            console.error('   → Error code:', err.code);
+            console.error('   → Error details:', err);
         });
 
         res.status(201).json({ message: 'User registered successfully' });
@@ -292,26 +296,28 @@ router.post('/forgot-password', async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Generate 6-digit OTP using Math.random
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+        const otpExpiry = Date.now() + 10 * 60 * 1000;
 
         user.resetPasswordOTP = otp;
         user.resetPasswordExpires = otpExpiry;
         
-        // Save without triggering password hash
         await user.save({ validateBeforeSave: false });
 
-        console.log('Generated OTP:', otp, 'for email:', email); // Debug log
-
-        // Send OTP email (non-blocking)
+        console.log('📧 [FORGOT-PASSWORD] Generated OTP:', otp, 'for:', email);
+        
+        // Send OTP email with better error handling
         sendOTPEmail({
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
             otp
+        }).then(() => {
+            console.log('✅ [FORGOT-PASSWORD] OTP email queued successfully');
         }).catch(err => {
-            console.error('Failed to send OTP email:', err);
+            console.error('❌ [FORGOT-PASSWORD] Failed to send OTP email:', err.message);
+            console.error('   → Error code:', err.code);
+            console.error('   → Error details:', err);
         });
 
         res.status(200).json({ message: 'OTP sent to email' });
@@ -392,21 +398,102 @@ router.post('/reset-password', async (req, res) => {
         
         await user.save();
 
-        console.log('Password reset successful for:', email); // Debug log
+        console.log('📧 [RESET-PASSWORD] Sending success email to:', email);
 
-        // Send success email (non-blocking)
+        // Send success email with better error handling
         sendPasswordResetSuccessEmail({
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName
+        }).then(() => {
+            console.log('✅ [RESET-PASSWORD] Success email queued');
         }).catch(err => {
-            console.error('Failed to send password reset success email:', err);
+            console.error('❌ [RESET-PASSWORD] Failed to send success email:', err.message);
+            console.error('   → Error code:', err.code);
+            console.error('   → Error details:', err);
         });
 
         res.status(200).json({ message: 'Password reset successful' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// TEST ENDPOINT - Add this temporarily
+router.post('/test-email', async (req, res) => {
+    try {
+        const { email, type } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email required' });
+        }
+
+        console.log('🧪 [TEST] Testing email service...');
+        console.log(`   → Sending to: ${email}`);
+        console.log(`   → Type: ${type || 'welcome'}`);
+        console.log(`   → SMTP_USER: ${process.env.SMTP_USER}`);
+        console.log(`   → SMTP_HOST: ${process.env.SMTP_HOST}`);
+        console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
+        
+        let result;
+        switch(type) {
+            case 'otp':
+                result = await sendOTPEmail({
+                    email,
+                    firstName: 'Test',
+                    lastName: 'User',
+                    otp: '123456'
+                });
+                break;
+            case 'password-reset':
+                result = await sendPasswordResetSuccessEmail({
+                    email,
+                    firstName: 'Test',
+                    lastName: 'User'
+                });
+                break;
+            default:
+                result = await sendWelcomeEmail({
+                    email,
+                    firstName: 'Test',
+                    lastName: 'User'
+                });
+        }
+
+        console.log('✅ [TEST] Email sent successfully');
+        console.log('   → Result:', result);
+
+        res.status(200).json({ 
+            success: true, 
+            message: `Test ${type || 'welcome'} email sent successfully`,
+            result,
+            config: {
+                smtpHost: process.env.SMTP_HOST,
+                smtpPort: process.env.SMTP_PORT,
+                smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
+                smtpPass: process.env.SMTP_PASS ? '✓ Set' : '✗ Not Set',
+                fromEmail: process.env.MAIL_FROM_EMAIL,
+                nodeEnv: process.env.NODE_ENV || 'development'
+            }
+        });
+    } catch (error) {
+        console.error('🧪 [TEST] Email test failed:');
+        console.error('   → Error:', error.message);
+        console.error('   → Code:', error.code);
+        console.error('   → Stack:', error.stack);
+        
+        res.status(500).json({ 
+            success: false,
+            error: error.message,
+            code: error.code,
+            details: error.toString(),
+            config: {
+                smtpHost: process.env.SMTP_HOST,
+                smtpPort: process.env.SMTP_PORT,
+                smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
+                smtpPass: process.env.SMTP_PASS ? '✓ Set' : '✗ Not Set'
+            }
+        });
     }
 });
 
