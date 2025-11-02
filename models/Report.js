@@ -5,17 +5,13 @@ const reportSchema = new mongoose.Schema({
     description: { type: String, required: true },
     sector: { 
         type: String, 
-        required: true,
-        enum: ['Technology', 'Banking', 'Healthcare', 'Energy', 'Market Analysis', 'FMCG', 'Auto']
+        required: true
     },
     reportType: {
         type: String,
-        enum: ['premium', 'bluechip'],
-        default: 'premium'
-    },
-    isFree: {
-        type: Boolean,
-        default: false
+        enum: ['premium', 'bluechip', 'free'],
+        default: 'premium',
+        required: true
     },
     pdf: {
         data: Buffer, // Store PDF as binary data

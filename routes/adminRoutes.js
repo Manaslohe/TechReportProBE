@@ -3,6 +3,8 @@ import User from '../models/User.js';
 import Report from '../models/Report.js';
 import PaymentRequest from '../models/PaymentRequest.js';
 import Contact from '../models/Contact.js';
+import { sendPurchaseApprovalEmail } from '../services/emailService.js';
+import { sendAdminNotification } from '../services/adminNotificationService.js'; // ADD
 
 const router = express.Router();
 
@@ -52,7 +54,14 @@ router.get('/dashboard', async (req, res) => {
 // Get All Users for Admin
 router.get('/users', async (req, res) => {
     try {
-        const users = await User.find().populate('purchasedReports', 'title').populate('paymentRequests');
+        const users = await User.find()
+            .populate({
+                path: 'purchasedReports.reportId',
+                select: 'title sector uploadDate'
+            })
+            .select('-password')
+            .lean();
+
         res.status(200).json(users);
     } catch (error) {
         console.error('Error fetching users for admin:', error);
@@ -68,6 +77,141 @@ router.get('/contacts', async (req, res) => {
     } catch (error) {
         console.error('Error fetching contacts for admin:', error);
         res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Approve Payment Request
+router.patch('/payment-requests/:id/approve', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const paymentRequest = await PaymentRequest.findById(id)
+            .populate('user', 'firstName lastName email')
+            .populate('report', 'title')
+            .populate('subscriptionPlan', 'planName');
+
+        if (!paymentRequest) {
+            return res.status(404).json({ error: 'Payment request not found' });
+        }
+
+        if (paymentRequest.status !== 'pending') {
+            return res.status(400).json({ error: 'Payment request already processed' });
+        }
+
+        const user = await User.findById(paymentRequest.user._id || paymentRequest.user);
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        paymentRequest.status = 'approved';
+        paymentRequest.approvedAt = new Date();
+        await paymentRequest.save();
+
+        if (paymentRequest.paymentType === 'subscription') {
+            const plan = paymentRequest.subscriptionPlan;
+            user.activateSubscription(plan);
+            await user.save();
+
+            // Send approval email with subscription details
+            sendPurchaseApprovalEmail({
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                purchaseType: 'Subscription',
+                itemName: plan.planName,
+                amount: paymentRequest.amount,
+                subscriptionDetails: {
+                    duration: plan.duration,
+                    totalReports: plan.reportsIncluded,
+                    premiumReports: plan.premiumReports,
+                    bluechipReports: plan.bluechipReports,
+                    expiryDate: user.currentSubscription?.expiryDate
+                }
+            }).catch(err => {
+                console.error('Failed to send purchase approval email:', err);
+            });
+
+        } else if (paymentRequest.paymentType === 'individual') {
+            user.purchasedReports.push({
+                reportId: paymentRequest.report._id || paymentRequest.report,
+                purchaseDate: new Date(),
+                price: paymentRequest.amount,
+                accessType: 'individual'
+            });
+            await user.save();
+
+            // Send approval email for individual report
+            sendPurchaseApprovalEmail({
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                purchaseType: 'Individual Report',
+                itemName: paymentRequest.report.title || 'Report',
+                amount: paymentRequest.amount
+            }).catch(err => {
+                console.error('Failed to send purchase approval email:', err);
+            });
+        }
+
+        res.status(200).json({ 
+            message: 'Payment request approved successfully',
+            paymentRequest 
+        });
+    } catch (error) {
+        console.error('Error approving payment request:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Send notification to user about their payment request status
+router.post('/payment-requests/:id/notify', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const paymentRequest = await PaymentRequest.findById(id)
+            .populate('user', 'firstName lastName email')
+            .populate('report', 'title')
+            .populate('subscriptionPlan', 'planName');
+
+        if (!paymentRequest) {
+            return res.status(404).json({ error: 'Payment request not found' });
+        }
+
+        if (paymentRequest.status === 'pending') {
+            return res.status(400).json({ error: 'Cannot notify for pending requests' });
+        }
+
+        const user = paymentRequest.user;
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Determine purchase type and item name
+        const purchaseType = paymentRequest.paymentType === 'subscription' ? 'subscription' : 'report';
+        const itemName = purchaseType === 'subscription' 
+            ? paymentRequest.subscriptionPlan?.planName || 'Subscription Plan'
+            : paymentRequest.report?.title || 'Report';
+
+        // Send notification email
+        await sendAdminNotification({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            status: paymentRequest.status,
+            purchaseType,
+            itemName,
+            amount: paymentRequest.amount,
+            requestId: paymentRequest._id,
+            adminComment: paymentRequest.adminComment || ''
+        });
+
+        res.status(200).json({ 
+            message: 'Notification sent successfully',
+            notificationSent: true
+        });
+    } catch (error) {
+        console.error('Error sending notification:', error);
+        res.status(500).json({ error: 'Failed to send notification' });
     }
 });
 

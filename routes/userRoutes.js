@@ -1,9 +1,10 @@
 import express from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import PaymentRequest from '../models/PaymentRequest.js';
-import Report from '../models/Report.js'; // added
+import Report from '../models/Report.js';
+import PaymentRequest from '../models/PaymentRequest.js'; // ADD this import
+import { sendWelcomeEmail, sendOTPEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -35,6 +36,17 @@ router.post('/signup', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = new User({ firstName, lastName, email, password: hashedPassword });
         await newUser.save();
+
+        // Send welcome email (non-blocking)
+        sendWelcomeEmail({ 
+            email, 
+            firstName, 
+            lastName 
+        }).catch(err => {
+            console.error('Failed to send welcome email:', err);
+            // Don't fail the signup if email fails
+        });
+
         res.status(201).json({ message: 'User registered successfully' });
     } catch (error) {
         console.error('Error during signup:', error);
@@ -76,7 +88,6 @@ router.post('/signin', async (req, res) => {
 router.get('/purchased-reports', verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        // Fetch only purchasedReports to reduce payload
         const user = await User.findById(userId).select('purchasedReports').lean();
 
         if (!user) {
@@ -89,10 +100,9 @@ router.get('/purchased-reports', verifyToken, async (req, res) => {
             .filter(id => !!id);
 
         if (reportIds.length === 0) {
-            return res.json([]); // nothing purchased
+            return res.json([]);
         }
 
-        // Fetch reports in one query
         const reports = await Report.find(
             { _id: { $in: reportIds } },
             'title sector uploadDate description isFree'
@@ -100,7 +110,6 @@ router.get('/purchased-reports', verifyToken, async (req, res) => {
 
         const reportMap = new Map(reports.map(r => [String(r._id), r]));
 
-        // Build clean response; skip entries where report is missing (deleted)
         const result = purchased.reduce((acc, pr) => {
             const rep = reportMap.get(String(pr.reportId));
             if (!rep) return acc;
@@ -156,7 +165,6 @@ router.get('/dashboard', verifyToken, async (req, res) => {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 email: user.email,
-                points: user.points,
                 joinDate: user.createdAt
             },
             subscription: subscriptionStatus,
@@ -266,6 +274,139 @@ router.get('/check-access/:reportId', verifyToken, async (req, res) => {
     } catch (error) {
         console.error('Error checking access:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Forgot Password - Send OTP
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const user = await User.findOne({ email });
+        
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Generate 6-digit OTP using Math.random
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        user.resetPasswordOTP = otp;
+        user.resetPasswordExpires = otpExpiry;
+        
+        // Save without triggering password hash
+        await user.save({ validateBeforeSave: false });
+
+        console.log('Generated OTP:', otp, 'for email:', email); // Debug log
+
+        // Send OTP email (non-blocking)
+        sendOTPEmail({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            otp
+        }).catch(err => {
+            console.error('Failed to send OTP email:', err);
+        });
+
+        res.status(200).json({ message: 'OTP sent to email' });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Verify OTP
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        
+        console.log('Verifying OTP:', { email, otp, type: typeof otp }); // Debug log
+        
+        if (!email || !otp) {
+            return res.status(400).json({ error: 'Email and OTP are required' });
+        }
+
+        const user = await User.findOne({
+            email,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        console.log('Found user:', user ? 'Yes' : 'No'); // Debug log
+        if (user) {
+            console.log('Stored OTP:', user.resetPasswordOTP, 'Received OTP:', otp); // Debug log
+            console.log('OTP Match:', user.resetPasswordOTP === String(otp)); // Debug log
+            console.log('Expiry valid:', user.resetPasswordExpires > Date.now()); // Debug log
+        }
+
+        if (!user) {
+            return res.status(400).json({ error: 'User not found or OTP expired' });
+        }
+
+        // Convert both to strings and trim for comparison
+        if (String(user.resetPasswordOTP).trim() !== String(otp).trim()) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        res.status(200).json({ message: 'OTP verified successfully' });
+    } catch (error) {
+        console.error('Verify OTP error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Reset Password
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        
+        console.log('Reset password request:', { email, otp, hasPassword: !!newPassword }); // Debug log
+        
+        if (!email || !otp || !newPassword) {
+            return res.status(400).json({ error: 'All fields are required' });
+        }
+
+        const user = await User.findOne({
+            email,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: 'User not found or OTP expired' });
+        }
+
+        // Verify OTP again
+        if (String(user.resetPasswordOTP).trim() !== String(otp).trim()) {
+            return res.status(400).json({ error: 'Invalid OTP' });
+        }
+
+        // Set new password (will be hashed by pre-save hook)
+        user.password = newPassword;
+        user.resetPasswordOTP = undefined;
+        user.resetPasswordExpires = undefined;
+        
+        await user.save();
+
+        console.log('Password reset successful for:', email); // Debug log
+
+        // Send success email (non-blocking)
+        sendPasswordResetSuccessEmail({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName
+        }).catch(err => {
+            console.error('Failed to send password reset success email:', err);
+        });
+
+        res.status(200).json({ message: 'Password reset successful' });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 

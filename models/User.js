@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 const subscriptionSchema = new mongoose.Schema({
     planId: { type: String, required: true },
@@ -21,6 +22,14 @@ const userSchema = new mongoose.Schema({
     lastName: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    resetPasswordOTP: {
+        type: String,
+        default: undefined
+    },
+    resetPasswordExpires: {
+        type: Date,
+        default: undefined
+    },
     
     // Subscription Management
     currentSubscription: subscriptionSchema,
@@ -30,23 +39,23 @@ const userSchema = new mongoose.Schema({
     purchasedReports: [{
         reportId: { type: mongoose.Schema.Types.ObjectId, ref: 'Report' },
         purchaseDate: { type: Date, default: Date.now },
-        price: { type: Number, required: true },
+        price: { type: Number, default: 0 },
         accessType: { 
             type: String, 
             enum: ['individual', 'subscription'], 
             default: 'individual' 
         }
-    }],
-    
-    // Points/Credits System
-    points: { type: Number, default: 0 },
-    
-    // Payment Requests
-    paymentRequests: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'PaymentRequest'
     }]
 }, { timestamps: true });
+
+// Hash password before saving
+userSchema.pre('save', async function (next) {
+    // Only hash the password if it's modified and not undefined
+    if (this.isModified('password') && this.password) {
+        this.password = await bcrypt.hash(this.password, 10);
+    }
+    next();
+});
 
 // Method to check if user has active subscription
 userSchema.methods.hasActiveSubscription = function() {

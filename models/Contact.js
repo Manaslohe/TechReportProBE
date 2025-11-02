@@ -1,11 +1,6 @@
 import mongoose from 'mongoose';
 
 const contactSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: false // Optional for unauthenticated users
-  },
   name: {
     type: String,
     required: true
@@ -18,7 +13,7 @@ const contactSchema = new mongoose.Schema({
     type: String,
     required: false
   },
-  subject: {
+  country: {
     type: String,
     required: false
   },
@@ -26,10 +21,19 @@ const contactSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  submittedAt: {
-    type: Date,
-    default: Date.now
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  isRead: {
+    type: Boolean,
+    default: false
   }
+}, { 
+  timestamps: true 
 });
 
-export default mongoose.model('Contact', contactSchema);
+const Contact = mongoose.model('Contact', contactSchema);
+
+export default Contact;

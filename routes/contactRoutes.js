@@ -5,20 +5,22 @@ const router = express.Router();
 
 // Submit Contact Form
 router.post('/', async (req, res) => {
-    const { name, email, phone, message } = req.body;
+    const { name, email, phone, country, message, userId } = req.body;
 
     try {
         // Basic validation
-        if (!name || !email || !phone || !message) {
-            return res.status(400).json({ error: 'All fields are required' });
+        if (!name || !email || !message) {
+            return res.status(400).json({ error: 'Name, email, and message are required' });
         }
 
         // Create a new contact message
         const newContact = new Contact({
             name,
             email,
-            phone,
-            message
+            phone: phone || '',
+            country: country || '',
+            message,
+            user: userId || null
         });
 
         // Save to database
@@ -35,7 +37,10 @@ router.post('/', async (req, res) => {
 router.get('/admin', async (req, res) => {
     try {
         // Fetch all contact messages from the database
-        const contacts = await Contact.find();
+        const contacts = await Contact.find()
+            .populate('user', 'firstName lastName email')
+            .sort({ createdAt: -1 })
+            .lean();
 
         res.status(200).json(contacts);
     } catch (error) {

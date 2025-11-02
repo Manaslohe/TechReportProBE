@@ -3,6 +3,7 @@ import multer from 'multer';
 import Report from '../models/Report.js';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import { sendSubscriptionReportAccessEmail } from '../services/emailService.js'; // ADD this import
 
 const router = express.Router();
 const upload = multer();
@@ -73,16 +74,22 @@ const checkReportAccess = async (userId, reportId, reportType = 'premium') => {
 // Upload Report
 router.post('/', upload.single('file'), async (req, res) => {
     const { originalname, mimetype, size } = req.file;
-    const { title, description, sector, isFree, uploadDate } = req.body;
+    const { title, description, sector, reportType, uploadDate } = req.body;
 
     // Validation
-    if (!title || !description || !sector || !originalname || !mimetype || !size) {
+    if (!title || !description || !sector || !reportType || !originalname || !mimetype || !size) {
         return res.status(400).json({ error: 'All fields are required' });
     }
 
-    const validSectors = ['Technology', 'Banking', 'Healthcare', 'Energy', 'Market Analysis', 'FMCG', 'Auto'];
-    if (!validSectors.includes(sector)) {
-        return res.status(400).json({ error: 'Invalid sector selected' });
+    // Remove sector validation - allow any sector name
+    // const validSectors = ['Technology', 'Banking', 'Healthcare', 'Energy', 'Market Analysis', 'FMCG', 'Auto'];
+    // if (!validSectors.includes(sector)) {
+    //     return res.status(400).json({ error: 'Invalid sector selected' });
+    // }
+
+    const validReportTypes = ['premium', 'bluechip', 'free'];
+    if (!validReportTypes.includes(reportType)) {
+        return res.status(400).json({ error: 'Invalid report type selected' });
     }
 
     try {
@@ -90,8 +97,8 @@ router.post('/', upload.single('file'), async (req, res) => {
             title,
             description,
             sector,
-            isFree: isFree === 'true' || isFree === true,
-            uploadDate: uploadDate ? new Date(uploadDate) : new Date(), // Use provided date or default to now
+            reportType,
+            uploadDate: uploadDate ? new Date(uploadDate) : new Date(),
             pdf: {
                 data: req.file.buffer,
                 contentType: mimetype,
@@ -207,6 +214,19 @@ router.post('/:id/use-subscription', requireAuth, async (req, res) => {
 
         await user.save();
 
+        // Send email notification (non-blocking)
+        const remainingReports = user.getAvailableReports();
+        sendSubscriptionReportAccessEmail({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            reportTitle: report.title,
+            reportSector: report.sector,
+            remainingReports
+        }).catch(err => {
+            console.error('Failed to send subscription report access email:', err);
+        });
+
         res.status(200).json({ 
             message: 'Report added successfully',
             report: {
@@ -215,7 +235,7 @@ router.post('/:id/use-subscription', requireAuth, async (req, res) => {
                 description: report.description,
                 sector: report.sector
             },
-            remainingReports: user.getAvailableReports()
+            remainingReports
         });
     } catch (error) {
         console.error('Error using subscription:', error);
