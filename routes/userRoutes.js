@@ -420,7 +420,7 @@ router.post('/reset-password', async (req, res) => {
     }
 });
 
-// TEST ENDPOINT - Add this temporarily
+// TEST ENDPOINT - Enhanced version
 router.post('/test-email', async (req, res) => {
     try {
         const { email, type } = req.body;
@@ -428,14 +428,19 @@ router.post('/test-email', async (req, res) => {
             return res.status(400).json({ error: 'Email required' });
         }
 
-        console.log('🧪 [TEST] Testing email service...');
-        console.log(`   → Sending to: ${email}`);
+        console.log('🧪 [TEST EMAIL] ========================');
+        console.log(`   → Target Email: ${email}`);
         console.log(`   → Type: ${type || 'welcome'}`);
         console.log(`   → SMTP_USER: ${process.env.SMTP_USER}`);
         console.log(`   → SMTP_HOST: ${process.env.SMTP_HOST}`);
+        console.log(`   → SMTP_PORT: ${process.env.SMTP_PORT}`);
         console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`   → Timestamp: ${new Date().toISOString()}`);
+        console.log('==========================================');
         
         let result;
+        const startTime = Date.now();
+        
         switch(type) {
             case 'otp':
                 result = await sendOTPEmail({
@@ -460,24 +465,26 @@ router.post('/test-email', async (req, res) => {
                 });
         }
 
-        console.log('✅ [TEST] Email sent successfully');
-        console.log('   → Result:', result);
+        const duration = Date.now() - startTime;
+        console.log(`✅ [TEST EMAIL] Completed in ${duration}ms`);
+        console.log('   → Result:', JSON.stringify(result, null, 2));
 
         res.status(200).json({ 
             success: true, 
             message: `Test ${type || 'welcome'} email sent successfully`,
             result,
+            duration: `${duration}ms`,
             config: {
                 smtpHost: process.env.SMTP_HOST,
                 smtpPort: process.env.SMTP_PORT,
                 smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
-                smtpPass: process.env.SMTP_PASS ? '✓ Set' : '✗ Not Set',
+                smtpPass: process.env.SMTP_PASS ? `✓ Set (${process.env.SMTP_PASS.length} chars)` : '✗ Not Set',
                 fromEmail: process.env.MAIL_FROM_EMAIL,
                 nodeEnv: process.env.NODE_ENV || 'development'
             }
         });
     } catch (error) {
-        console.error('🧪 [TEST] Email test failed:');
+        console.error('🧪 [TEST EMAIL] Failed:');
         console.error('   → Error:', error.message);
         console.error('   → Code:', error.code);
         console.error('   → Stack:', error.stack);
@@ -491,7 +498,7 @@ router.post('/test-email', async (req, res) => {
                 smtpHost: process.env.SMTP_HOST,
                 smtpPort: process.env.SMTP_PORT,
                 smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
-                smtpPass: process.env.SMTP_PASS ? '✓ Set' : '✗ Not Set'
+                smtpPass: process.env.SMTP_PASS ? `✓ Set (${process.env.SMTP_PASS.length} chars)` : '✗ Not Set'
             }
         });
     }
