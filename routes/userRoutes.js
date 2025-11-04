@@ -33,20 +33,25 @@ router.post('/signup', async (req, res) => {
             return res.status(400).json({ error: 'Email already in use' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ firstName, lastName, email, password: hashedPassword });
+        // Remove manual hashing - the User model pre-save hook will handle it
+        const newUser = new User({ firstName, lastName, email, password }); // CHANGED: removed bcrypt.hash
         await newUser.save();
 
-        // IMMEDIATE RESPONSE - Don't wait for email
-        res.status(201).json({ message: 'User registered successfully' });
-
-        // Send welcome email AFTER response (fire-and-forget)
-        setImmediate(() => {
-            sendWelcomeEmail({ email, firstName, lastName })
-                .then(() => console.log('✅ Welcome email queued'))
-                .catch(err => console.error('❌ Welcome email failed:', err.message));
+        // Send welcome email with better error handling
+        console.log('📧 [SIGNUP] Attempting to send welcome email to:', email);
+        sendWelcomeEmail({ 
+            email, 
+            firstName, 
+            lastName 
+        }).then(() => {
+            console.log('✅ [SIGNUP] Welcome email queued successfully');
+        }).catch(err => {
+            console.error('❌ [SIGNUP] Failed to send welcome email:', err.message);
+            console.error('   → Error code:', err.code);
+            console.error('   → Error details:', err);
         });
 
+        res.status(201).json({ message: 'User registered successfully' });
     } catch (error) {
         console.error('Error during signup:', error);
         res.status(500).json({ error: 'Error registering user' });
@@ -299,23 +304,23 @@ router.post('/forgot-password', async (req, res) => {
         
         await user.save({ validateBeforeSave: false });
 
-        // IMMEDIATE RESPONSE
-        res.status(200).json({ message: 'OTP sent to email' });
-
-        // Send OTP email AFTER response (fire-and-forget)
-        setImmediate(() => {
-            sendOTPEmail({
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                otp
-            }).then(() => {
-                console.log('✅ OTP email sent');
-            }).catch(err => {
-                console.error('❌ OTP email failed:', err.message);
-            });
+        console.log('📧 [FORGOT-PASSWORD] Generated OTP:', otp, 'for:', email);
+        
+        // Send OTP email with better error handling
+        sendOTPEmail({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            otp
+        }).then(() => {
+            console.log('✅ [FORGOT-PASSWORD] OTP email queued successfully');
+        }).catch(err => {
+            console.error('❌ [FORGOT-PASSWORD] Failed to send OTP email:', err.message);
+            console.error('   → Error code:', err.code);
+            console.error('   → Error details:', err);
         });
 
+        res.status(200).json({ message: 'OTP sent to email' });
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ error: 'Server error' });
