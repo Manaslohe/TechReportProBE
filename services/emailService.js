@@ -8,57 +8,44 @@ console.log('📧 Email Service Configuration:');
 console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`   SMTP_HOST: ${process.env.SMTP_HOST}`);
 console.log(`   SMTP_PORT: ${process.env.SMTP_PORT}`);
-console.log(`   SMTP_SECURE: ${process.env.SMTP_SECURE}`);
-console.log(`   SMTP_USER: ${process.env.SMTP_USER ? '✓ Set (' + process.env.SMTP_USER + ')' : '✗ Missing'}`);
-console.log(`   SMTP_PASS: ${process.env.SMTP_PASS ? '✓ Set (length: ' + process.env.SMTP_PASS.length + ')' : '✗ Missing'}`);
-console.log(`   MAIL_FROM_NAME: ${process.env.MAIL_FROM_NAME}`);
-console.log(`   MAIL_FROM_EMAIL: ${process.env.MAIL_FROM_EMAIL}`);
+console.log(`   SMTP_USER: ${process.env.SMTP_USER ? '✓ Set' : '✗ Missing'}`);
+console.log(`   SMTP_PASS: ${process.env.SMTP_PASS ? '✓ Set' : '✗ Missing'}`);
 
-// Create transporter with better error handling
+// Create transporter with optimized settings for speed
 const createTransporter = () => {
 	try {
-		// Remove spaces from password (common copy-paste issue)
 		const cleanPassword = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
 		
-		const config = {
+		const transporter = nodemailer.createTransport({
 			host: process.env.SMTP_HOST || 'smtp.gmail.com',
 			port: Number(process.env.SMTP_PORT) || 465,
-			secure: true, // Always true for port 465
+			secure: true,
 			auth: {
 				user: process.env.SMTP_USER,
 				pass: cleanPassword
 			},
-			// Add these for better stability in production
-			pool: true, // Use pooled connections
-			maxConnections: 5,
-			maxMessages: 100,
+			// Optimized connection pooling
+			pool: true,
+			maxConnections: 10, // Increased from 5
+			maxMessages: Infinity, // No limit on messages per connection
 			rateDelta: 1000,
-			rateLimit: 5,
-			// Debug settings
-			debug: process.env.NODE_ENV !== 'production',
-			logger: process.env.NODE_ENV !== 'production'
-		};
-
-		console.log('📧 Creating transporter with config:', {
-			host: config.host,
-			port: config.port,
-			secure: config.secure,
-			user: config.auth.user,
-			passLength: config.auth.pass?.length
+			rateLimit: 10, // Increased from 5
+			// Timeouts
+			connectionTimeout: 10000, // 10 seconds
+			greetingTimeout: 5000, // 5 seconds
+			socketTimeout: 20000, // 20 seconds
+			// Disable debug in production for speed
+			debug: false,
+			logger: false
 		});
 
-		const transporter = nodemailer.createTransport(config);
+		console.log('✅ [EMAIL] Transporter created with optimized settings');
 
-		// Verify connection immediately
-		transporter.verify((error, success) => {
-			if (error) {
-				console.error('❌ [EMAIL] Connection verification failed:');
-				console.error('   → Error:', error.message);
-				console.error('   → Code:', error.code);
-			} else {
-				console.log('✅ [EMAIL] Email service is ready to send emails');
-				console.log('   → Success:', success);
-			}
+		// Verify connection asynchronously (non-blocking)
+		transporter.verify().then(() => {
+			console.log('✅ [EMAIL] Email service verified and ready');
+		}).catch((error) => {
+			console.error('❌ [EMAIL] Verification failed:', error.message);
 		});
 
 		return transporter;
@@ -303,7 +290,7 @@ const buildPasswordResetSuccessHtml = ({ firstName, lastName }) => {
 					
 					<!-- CTA Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://techreportspro.vercel.app/signin" 
+						<a href="https://www.marketmindsresearch.com/signin" 
 						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							Sign In Now
 						</a>
@@ -458,7 +445,7 @@ const buildPurchaseApprovalHtml = ({ firstName, lastName, purchaseType, itemName
 					
 					<!-- CTA Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://techreportspro.vercel.app/dashboard" 
+						<a href="https://www.marketmindsresearch.com/dashboard" 
 						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							${isSubscription ? 'Browse Reports' : 'View Report'}
 						</a>
@@ -466,7 +453,7 @@ const buildPurchaseApprovalHtml = ({ firstName, lastName, purchaseType, itemName
 					
 					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0;border-top:1px solid #e5e7eb;padding-top:20px">
 						All your purchases and subscription details are available in your 
-						<a href="https://techreportspro.vercel.app/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">User Dashboard</a>.
+						<a href="https://www.marketmindsresearch.com/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">User Dashboard</a>.
 					</p>
 					
 					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:15px 0 0 0">
@@ -547,7 +534,7 @@ const buildSubscriptionReportAccessHtml = ({ firstName, lastName, reportTitle, r
 					
 					<!-- CTA Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://techreportspro.vercel.app/dashboard" 
+						<a href="https://www.marketmindsresearch.com/dashboard" 
 						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							View in Dashboard
 						</a>
@@ -555,7 +542,7 @@ const buildSubscriptionReportAccessHtml = ({ firstName, lastName, reportTitle, r
 					
 					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0;border-top:1px solid #e5e7eb;padding-top:20px">
 						All your accessed reports are available in your 
-						<a href="https://techreportspro.vercel.app/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">Dashboard</a>.
+						<a href="https://www.marketmindsresearch.com/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">Dashboard</a>.
 					</p>
 					
 					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:15px 0 0 0">
@@ -580,127 +567,82 @@ const buildSubscriptionReportAccessHtml = ({ firstName, lastName, reportTitle, r
 	`;
 };
 
-// Send welcome email with enhanced error handling
+// Optimized send function wrapper
+const sendMailFast = async (mailOptions, emailType = 'email') => {
+	try {
+		const startTime = Date.now();
+		console.log(`📧 [${emailType.toUpperCase()}] Sending to: ${mailOptions.to}`);
+		
+		// Send immediately without waiting for verification
+		const info = await mailTransporter.sendMail(mailOptions);
+		
+		const duration = Date.now() - startTime;
+		console.log(`✅ [${emailType.toUpperCase()}] Sent in ${duration}ms`);
+		console.log(`   → Message ID: ${info.messageId}`);
+		
+		return { success: true, messageId: info.messageId, duration };
+	} catch (error) {
+		console.error(`❌ [${emailType.toUpperCase()}] Failed:`, error.message);
+		throw error;
+	}
+};
+
+// Send welcome email
 export const sendWelcomeEmail = async ({ email, firstName, lastName }) => {
 	try {
-		console.log('📧 [WELCOME EMAIL] Starting send process...');
-		console.log(`   → To: ${email}`);
-		console.log(`   → Name: ${firstName} ${lastName}`);
-		console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
-		console.log(`   → Timestamp: ${new Date().toISOString()}`);
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds Research';
 		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
-		if (!fromEmail || !process.env.SMTP_USER) {
-			const error = new Error('SMTP_USER not configured');
-			console.error('❌ [WELCOME EMAIL] Configuration error:', error.message);
-			throw error;
-		}
-
-		if (!email || !email.includes('@')) {
-			const error = new Error('Invalid recipient email');
-			console.error('❌ [WELCOME EMAIL] Invalid email:', email);
-			throw error;
+		if (!fromEmail || !email?.includes('@')) {
+			throw new Error('Invalid email configuration');
 		}
 
 		const mailOptions = {
-			from: `"${fromName}" <${fromEmail}>`, // Quoted display name
+			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
-			replyTo: fromEmail,
 			subject: '🎉 Welcome to MarketMinds - Let\'s Get Started!',
-			text: `Hello ${firstName} ${lastName},\n\nWelcome to MarketMinds! We're thrilled to have you on board.\n\nYour account has been successfully created. You can now access our comprehensive market reports and industry insights.\n\nGet started: https://www.marketmindsresearch.com/signin\n\nBest regards,\nThe MarketMinds Team`,
 			html: buildWelcomeEmailHtml({ firstName, lastName }),
+			// Priority headers
 			headers: {
 				'X-Priority': '3',
-				'X-Mailer': 'MarketMinds Mailer v1.0',
 				'Importance': 'normal'
 			}
 		};
 
-		console.log('📧 [WELCOME EMAIL] Mail options prepared:');
-		console.log(`   → From: ${mailOptions.from}`);
-		console.log(`   → To: ${mailOptions.to}`);
-		console.log(`   → Subject: ${mailOptions.subject}`);
-		
-		// Add timeout to prevent hanging
-		const sendPromise = mailTransporter.sendMail(mailOptions);
-		const timeoutPromise = new Promise((_, reject) => 
-			setTimeout(() => reject(new Error('Email send timeout after 30s')), 30000)
-		);
-
-		const info = await Promise.race([sendPromise, timeoutPromise]);
-		
-		console.log('✅ [WELCOME EMAIL] Email sent successfully!');
-		console.log(`   → Message ID: ${info.messageId}`);
-		console.log(`   → Response: ${info.response}`);
-		console.log(`   → Accepted: ${JSON.stringify(info.accepted)}`);
-		console.log(`   → Rejected: ${JSON.stringify(info.rejected)}`);
-		
-		return { success: true, messageId: info.messageId };
+		return await sendMailFast(mailOptions, 'WELCOME');
 	} catch (error) {
-		console.error('❌ [WELCOME EMAIL] Failed to send:');
-		console.error(`   → Error Message: ${error?.message || 'Unknown error'}`);
-		console.error(`   → Error Code: ${error?.code || 'N/A'}`);
-		console.error(`   → Error Command: ${error?.command || 'N/A'}`);
-		console.error(`   → Error Response: ${error?.response || 'N/A'}`);
-		console.error(`   → Error Stack: ${error?.stack || 'N/A'}`);
-		
-		// Don't throw - just log the error to prevent signup failure
+		console.error('❌ [WELCOME EMAIL] Error:', error.message);
 		return { success: false, error: error.message };
 	}
 };
 
-// Send OTP email with enhanced error handling
+// Send OTP email - HIGHEST PRIORITY
 export const sendOTPEmail = async ({ email, firstName, lastName, otp }) => {
 	try {
-		console.log('📧 [OTP EMAIL] Starting send process...');
-		console.log(`   → To: ${email}`);
-		console.log(`   → Name: ${firstName} ${lastName}`);
-		console.log(`   → OTP: ${otp}`);
-		console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
-		console.log(`   → Timestamp: ${new Date().toISOString()}`);
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds Research';
 		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
-		if (!fromEmail || !process.env.SMTP_USER) {
+		if (!fromEmail) {
 			throw new Error('SMTP_USER not configured');
 		}
 
 		const mailOptions = {
 			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
-			replyTo: fromEmail,
-			subject: '🔐 Password Reset Verification Code - MarketMinds',
-			text: `Hello ${firstName} ${lastName},\n\nYour password reset verification code is: ${otp}\n\nThis code is valid for 10 minutes.\n\nIf you didn't request this, please ignore this email.\n\nBest regards,\nThe MarketMinds Team`,
+			subject: '🔐 Password Reset Code - MarketMinds',
 			html: buildOTPEmailHtml({ firstName, lastName, otp }),
+			// HIGHEST priority for OTP
+			priority: 'high',
 			headers: {
 				'X-Priority': '1',
-				'X-Mailer': 'MarketMinds Mailer v1.0',
-				'Importance': 'high'
+				'Importance': 'high',
+				'X-MSMail-Priority': 'High'
 			}
 		};
 
-		console.log(`📧 [OTP EMAIL] Sending from: ${mailOptions.from} to: ${mailOptions.to}`);
-		
-		const sendPromise = mailTransporter.sendMail(mailOptions);
-		const timeoutPromise = new Promise((_, reject) => 
-			setTimeout(() => reject(new Error('Email send timeout after 30s')), 30000)
-		);
-
-		const info = await Promise.race([sendPromise, timeoutPromise]);
-		
-		console.log('✅ [OTP EMAIL] Email sent successfully!');
-		console.log(`   → Message ID: ${info.messageId}`);
-		console.log(`   → Response: ${info.response}`);
-		
-		return { success: true, messageId: info.messageId };
+		return await sendMailFast(mailOptions, 'OTP');
 	} catch (error) {
-		console.error('❌ [OTP EMAIL] Failed to send:');
-		console.error(`   → Error: ${error?.message || error}`);
-		console.error(`   → Code: ${error?.code}`);
-		console.error(`   → Stack: ${error?.stack}`);
+		console.error('❌ [OTP EMAIL] Error:', error.message);
 		throw error;
 	}
 };
@@ -708,26 +650,19 @@ export const sendOTPEmail = async ({ email, firstName, lastName, otp }) => {
 // Send password reset success email
 export const sendPasswordResetSuccessEmail = async ({ email, firstName, lastName }) => {
 	try {
-		console.log('📧 [RESET SUCCESS] Sending password reset success email...');
-		console.log(`   → To: ${email}`);
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds Research';
 		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
 		const mailOptions = {
 			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
-			replyTo: fromEmail,
 			subject: '✅ Password Successfully Reset - MarketMinds',
-			text: `Hello ${firstName} ${lastName},\n\nYour password has been successfully reset.\n\nIf you didn't make this change, please contact our support team immediately.\n\nBest regards,\nThe MarketMinds Team`,
 			html: buildPasswordResetSuccessHtml({ firstName, lastName })
 		};
 
-		const info = await mailTransporter.sendMail(mailOptions);
-		console.log('✅ [RESET SUCCESS] Email sent:', info.messageId);
-		return { success: true };
+		return await sendMailFast(mailOptions, 'RESET-SUCCESS');
 	} catch (error) {
-		console.error('❌ [RESET SUCCESS] Error:', error?.message || error);
+		console.error('❌ [RESET SUCCESS] Error:', error.message);
 		throw error;
 	}
 };
@@ -735,32 +670,19 @@ export const sendPasswordResetSuccessEmail = async ({ email, firstName, lastName
 // Send purchase approval email
 export const sendPurchaseApprovalEmail = async ({ email, firstName, lastName, purchaseType, itemName, amount, subscriptionDetails }) => {
 	try {
-		console.log('📧 [EMAIL] Sending purchase approval email...');
-		console.log(`   → To: ${email}`);
-		console.log(`   → Name: ${firstName} ${lastName}`);
-		console.log(`   → Type: ${purchaseType}`);
-		console.log(`   → Item: ${itemName}`);
-		console.log(`   → Amount: ₹${amount}`);
-		if (subscriptionDetails) {
-			console.log(`   → Subscription Details:`, subscriptionDetails);
-		}
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
 		const mailOptions = {
-			from: `${fromName} <${fromEmail}>`,
+			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
 			subject: purchaseType === 'Subscription' ? '🎉 Subscription Activated - MarketMinds' : '✅ Purchase Approved - MarketMinds',
-			text: `Hello ${firstName} ${lastName},\n\n${purchaseType === 'Subscription' ? 'Congratulations! Your subscription has been activated.' : 'Great news! Your purchase has been approved.'}\n\nType: ${purchaseType}\n${purchaseType === 'Subscription' ? 'Plan' : 'Report'}: ${itemName}\nAmount: ₹${amount}\n\n${subscriptionDetails ? `\nSubscription Benefits:\n- Premium Reports: ${subscriptionDetails.premiumReports}\n- Bluechip Reports: ${subscriptionDetails.bluechipReports}\n- Total Reports: ${subscriptionDetails.totalReports}\n- Duration: ${subscriptionDetails.duration} months\n` : ''}\nYou can view all your purchases in your dashboard: https://techreportspro.vercel.app/dashboard\n\nBest regards,\nThe MarketMinds Team`,
 			html: buildPurchaseApprovalHtml({ firstName, lastName, purchaseType, itemName, amount, subscriptionDetails })
 		};
 
-		await mailTransporter.sendMail(mailOptions);
-		console.log('✅ [EMAIL] Purchase approval email sent successfully');
-		return { success: true };
+		return await sendMailFast(mailOptions, 'PURCHASE');
 	} catch (error) {
-		console.error('❌ [EMAIL] Purchase approval email error:', error?.message || error);
+		console.error('❌ [PURCHASE EMAIL] Error:', error.message);
 		throw error;
 	}
 };
@@ -768,30 +690,19 @@ export const sendPurchaseApprovalEmail = async ({ email, firstName, lastName, pu
 // Send subscription report access email
 export const sendSubscriptionReportAccessEmail = async ({ email, firstName, lastName, reportTitle, reportSector, remainingReports }) => {
 	try {
-		console.log('📧 [EMAIL] Sending subscription report access email...');
-		console.log(`   → To: ${email}`);
-		console.log(`   → Name: ${firstName} ${lastName}`);
-		console.log(`   → Report: ${reportTitle}`);
-		console.log(`   → Sector: ${reportSector}`);
-		console.log(`   → Remaining: ${remainingReports.total} reports (${remainingReports.premium}P + ${remainingReports.bluechip}B)`);
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
 		const mailOptions = {
-			from: `${fromName} <${fromEmail}>`,
+			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
 			subject: '📊 Report Unlocked - MarketMinds',
-			text: `Hello ${firstName} ${lastName},\n\nYou've successfully unlocked a new report!\n\nReport: ${reportTitle}\nSector: ${reportSector}\nAccess Type: Via Subscription\n\nRemaining Reports: ${remainingReports.total || 0} (${remainingReports.premium || 0} Premium + ${remainingReports.bluechip || 0} Bluechip)\n\nView all your reports in your dashboard: https://techreportspro.vercel.app/dashboard\n\nBest regards,\nThe MarketMinds Team`,
 			html: buildSubscriptionReportAccessHtml({ firstName, lastName, reportTitle, reportSector, remainingReports })
 		};
 
-		const info = await mailTransporter.sendMail(mailOptions);
-		console.log('✅ [EMAIL] Subscription report access email sent successfully');
-		console.log(`   → Message ID: ${info.messageId}`);
-		return { success: true, messageId: info.messageId };
+		return await sendMailFast(mailOptions, 'REPORT-ACCESS');
 	} catch (error) {
-		console.error('❌ [EMAIL] Subscription report access email error:', error?.message || error);
+		console.error('❌ [REPORT ACCESS EMAIL] Error:', error.message);
 		throw error;
 	}
 };
@@ -799,42 +710,24 @@ export const sendSubscriptionReportAccessEmail = async ({ email, firstName, last
 // Send contact form email
 export const sendContactEmail = async ({ name, email, phone, country, message }) => {
 	try {
-		console.log('📧 [EMAIL] Sending contact form email...');
-		console.log(`   → From: ${name} (${email})`);
-		console.log(`   → Phone: ${phone || 'N/A'}`);
-		console.log(`   → Country: ${country || 'N/A'}`);
-		
 		const fromName = process.env.MAIL_FROM_NAME || 'Contact Form';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || 'noreply@marketmindsresearch.com';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 		const toEmail = process.env.MAIL_TO || process.env.SMTP_USER;
 
-		console.log(`   → Sending to admin: ${toEmail}`);
-
 		const mailOptions = {
-			from: `${fromName} <${fromEmail}>`,
+			from: `"${fromName}" <${fromEmail}>`,
 			to: toEmail,
 			subject: `New Contact form submission - MarketMinds`,
-			text: [
-				`New contact form submission`,
-				`Name: ${name}`,
-				`Email: ${email}`,
-				`Phone: ${phone || 'Not provided'}`,
-				`Country: ${country || 'Not provided'}`,
-				`Message:\n${message}`
-			].join('\n'),
 			html: buildContactEmailHtml({ name, email, phone, country, message })
 		};
 
-		await mailTransporter.sendMail(mailOptions);
-		console.log('✅ [EMAIL] Contact form email sent successfully to admin');
-		return { success: true };
+		return await sendMailFast(mailOptions, 'CONTACT');
 	} catch (error) {
-		console.error('❌ [EMAIL] Contact email error:', error?.message || error);
+		console.error('❌ [CONTACT EMAIL] Error:', error.message);
 		throw error;
 	}
 };
 
-// default export
 export default {
 	sendWelcomeEmail,
 	sendContactEmail,

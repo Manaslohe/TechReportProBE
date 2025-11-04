@@ -3,16 +3,30 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter
-const adminMailTransporter = nodemailer.createTransport({
-	host: process.env.SMTP_HOST || 'smtp.gmail.com',
-	port: Number(process.env.SMTP_PORT) || 465,
-	secure: String(process.env.SMTP_SECURE || 'true') === 'true',
-	auth: {
-		user: process.env.SMTP_USER,
-		pass: process.env.SMTP_PASS
-	}
-});
+// Create optimized transporter for admin notifications
+const createAdminTransporter = () => {
+	const cleanPassword = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
+	
+	return nodemailer.createTransport({
+		host: process.env.SMTP_HOST || 'smtp.gmail.com',
+		port: Number(process.env.SMTP_PORT) || 465,
+		secure: true,
+		auth: {
+			user: process.env.SMTP_USER,
+			pass: cleanPassword
+		},
+		pool: true,
+		maxConnections: 10,
+		maxMessages: Infinity,
+		connectionTimeout: 10000,
+		greetingTimeout: 5000,
+		socketTimeout: 20000,
+		debug: false,
+		logger: false
+	});
+};
+
+const adminMailTransporter = createAdminTransporter();
 
 // Helper to escape HTML
 const htmlEscape = (s = '') =>
@@ -92,7 +106,7 @@ const buildApprovalNotificationHtml = ({ firstName, lastName, purchaseType, item
 					
 					<!-- CTA Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://techreportspro.vercel.app/dashboard" 
+						<a href="https://www.marketmindsresearch.com/dashboard" 
 						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							View Dashboard
 						</a>
@@ -220,7 +234,7 @@ const buildRejectionNotificationHtml = ({ firstName, lastName, purchaseType, ite
 	`;
 };
 
-// Send admin notification email
+// Send admin notification email - OPTIMIZED
 export const sendAdminNotification = async ({ 
 	email, 
 	firstName, 
@@ -233,12 +247,10 @@ export const sendAdminNotification = async ({
 	adminComment 
 }) => {
 	try {
-		console.log('📧 [ADMIN NOTIFICATION] Sending notification...');
+		const startTime = Date.now();
+		console.log('📧 [ADMIN NOTIFICATION] Sending...');
 		console.log(`   → To: ${email}`);
-		console.log(`   → Name: ${firstName} ${lastName}`);
 		console.log(`   → Status: ${status}`);
-		console.log(`   → Type: ${purchaseType}`);
-		console.log(`   → Item: ${itemName}`);
 		
 		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
 		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
@@ -252,39 +264,25 @@ export const sendAdminNotification = async ({
 			? buildApprovalNotificationHtml({ firstName, lastName, purchaseType, itemName, amount, requestId, adminComment })
 			: buildRejectionNotificationHtml({ firstName, lastName, purchaseType, itemName, amount, requestId, adminComment });
 
-		const textContent = `
-Hello ${firstName} ${lastName},
-
-Your payment request has been ${status}.
-
-Request Details:
-- Type: ${purchaseType === 'subscription' ? 'Subscription Plan' : 'Individual Report'}
-- ${purchaseType === 'subscription' ? 'Plan Name' : 'Report Title'}: ${itemName}
-- Amount: ₹${amount}
-- Request ID: ${requestId}
-
-${adminComment ? `\n${status === 'approved' ? 'Admin Message' : 'Reason for Rejection'}:\n${adminComment}\n` : ''}
-
-${isApproved 
-	? 'You can now access your content from your dashboard: https://techreportspro.vercel.app/dashboard' 
-	: 'Please contact our support team if you have any questions: info.marketmindsresearch@gmail.com'
-}
-
-Best regards,
-The MarketMinds Team
-		`.trim();
-
 		const mailOptions = {
-			from: `${fromName} <${fromEmail}>`,
+			from: `"${fromName}" <${fromEmail}>`,
 			to: email,
 			subject,
-			text: textContent,
-			html: htmlContent
+			html: htmlContent,
+			priority: 'high',
+			headers: {
+				'X-Priority': '1',
+				'Importance': 'high'
+			}
 		};
 
-		await adminMailTransporter.sendMail(mailOptions);
-		console.log(`✅ [ADMIN NOTIFICATION] ${status} notification sent successfully`);
-		return { success: true };
+		const info = await adminMailTransporter.sendMail(mailOptions);
+		
+		const duration = Date.now() - startTime;
+		console.log(`✅ [ADMIN NOTIFICATION] Sent in ${duration}ms`);
+		console.log(`   → Message ID: ${info.messageId}`);
+		
+		return { success: true, messageId: info.messageId, duration };
 	} catch (error) {
 		console.error('❌ [ADMIN NOTIFICATION] Error:', error?.message || error);
 		throw error;
