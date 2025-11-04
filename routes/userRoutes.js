@@ -33,8 +33,8 @@ router.post('/signup', async (req, res) => {
             return res.status(400).json({ error: 'Email already in use' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ firstName, lastName, email, password: hashedPassword });
+        // Remove manual hashing - the User model pre-save hook will handle it
+        const newUser = new User({ firstName, lastName, email, password }); // CHANGED: removed bcrypt.hash
         await newUser.save();
 
         // Send welcome email with better error handling
@@ -371,7 +371,7 @@ router.post('/reset-password', async (req, res) => {
     try {
         const { email, otp, newPassword } = req.body;
         
-        console.log('Reset password request:', { email, otp, hasPassword: !!newPassword }); // Debug log
+        console.log('Reset password request:', { email, otp, hasPassword: !!newPassword });
         
         if (!email || !otp || !newPassword) {
             return res.status(400).json({ error: 'All fields are required' });
@@ -386,12 +386,10 @@ router.post('/reset-password', async (req, res) => {
             return res.status(400).json({ error: 'User not found or OTP expired' });
         }
 
-        // Verify OTP again
         if (String(user.resetPasswordOTP).trim() !== String(otp).trim()) {
             return res.status(400).json({ error: 'Invalid OTP' });
         }
 
-        // Set new password (will be hashed by pre-save hook)
         user.password = newPassword;
         user.resetPasswordOTP = undefined;
         user.resetPasswordExpires = undefined;
@@ -400,7 +398,6 @@ router.post('/reset-password', async (req, res) => {
 
         console.log('📧 [RESET-PASSWORD] Sending success email to:', email);
 
-        // Send success email with better error handling
         sendPasswordResetSuccessEmail({
             email: user.email,
             firstName: user.firstName,
@@ -417,90 +414,6 @@ router.post('/reset-password', async (req, res) => {
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Server error' });
-    }
-});
-
-// TEST ENDPOINT - Enhanced version
-router.post('/test-email', async (req, res) => {
-    try {
-        const { email, type } = req.body;
-        if (!email) {
-            return res.status(400).json({ error: 'Email required' });
-        }
-
-        console.log('🧪 [TEST EMAIL] ========================');
-        console.log(`   → Target Email: ${email}`);
-        console.log(`   → Type: ${type || 'welcome'}`);
-        console.log(`   → SMTP_USER: ${process.env.SMTP_USER}`);
-        console.log(`   → SMTP_HOST: ${process.env.SMTP_HOST}`);
-        console.log(`   → SMTP_PORT: ${process.env.SMTP_PORT}`);
-        console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`   → Timestamp: ${new Date().toISOString()}`);
-        console.log('==========================================');
-        
-        let result;
-        const startTime = Date.now();
-        
-        switch(type) {
-            case 'otp':
-                result = await sendOTPEmail({
-                    email,
-                    firstName: 'Test',
-                    lastName: 'User',
-                    otp: '123456'
-                });
-                break;
-            case 'password-reset':
-                result = await sendPasswordResetSuccessEmail({
-                    email,
-                    firstName: 'Test',
-                    lastName: 'User'
-                });
-                break;
-            default:
-                result = await sendWelcomeEmail({
-                    email,
-                    firstName: 'Test',
-                    lastName: 'User'
-                });
-        }
-
-        const duration = Date.now() - startTime;
-        console.log(`✅ [TEST EMAIL] Completed in ${duration}ms`);
-        console.log('   → Result:', JSON.stringify(result, null, 2));
-
-        res.status(200).json({ 
-            success: true, 
-            message: `Test ${type || 'welcome'} email sent successfully`,
-            result,
-            duration: `${duration}ms`,
-            config: {
-                smtpHost: process.env.SMTP_HOST,
-                smtpPort: process.env.SMTP_PORT,
-                smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
-                smtpPass: process.env.SMTP_PASS ? `✓ Set (${process.env.SMTP_PASS.length} chars)` : '✗ Not Set',
-                fromEmail: process.env.MAIL_FROM_EMAIL,
-                nodeEnv: process.env.NODE_ENV || 'development'
-            }
-        });
-    } catch (error) {
-        console.error('🧪 [TEST EMAIL] Failed:');
-        console.error('   → Error:', error.message);
-        console.error('   → Code:', error.code);
-        console.error('   → Stack:', error.stack);
-        
-        res.status(500).json({ 
-            success: false,
-            error: error.message,
-            code: error.code,
-            details: error.toString(),
-            config: {
-                smtpHost: process.env.SMTP_HOST,
-                smtpPort: process.env.SMTP_PORT,
-                smtpUser: process.env.SMTP_USER ? '✓ Set' : '✗ Not Set',
-                smtpPass: process.env.SMTP_PASS ? `✓ Set (${process.env.SMTP_PASS.length} chars)` : '✗ Not Set'
-            }
-        });
     }
 });
 
