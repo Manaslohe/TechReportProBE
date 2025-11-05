@@ -417,4 +417,70 @@ router.post('/reset-password', async (req, res) => {
     }
 });
 
+// Get All Users (Admin Only) - ADD THIS NEW ROUTE
+router.get('/admin/all-users', async (req, res) => {
+    try {
+        // Verify admin access
+        const isAdmin = req.header('x-admin-auth') === 'true';
+        if (!isAdmin) {
+            return res.status(401).json({ error: 'Admin access required' });
+        }
+
+        const users = await User.find()
+            .select('-password -resetPasswordOTP -resetPasswordExpires')
+            .lean();
+
+        // Manually populate purchased reports
+        const usersWithReports = await Promise.all(
+            users.map(async (user) => {
+                // Populate purchased reports
+                if (user.purchasedReports && user.purchasedReports.length > 0) {
+                    const reportIds = user.purchasedReports.map(pr => pr.reportId).filter(id => id);
+                    const reports = await Report.find({ _id: { $in: reportIds } })
+                        .select('title sector uploadDate description')
+                        .lean();
+                    
+                    const reportMap = new Map(reports.map(r => [r._id.toString(), r]));
+                    
+                    user.purchasedReports = user.purchasedReports.map(pr => ({
+                        _id: pr._id,
+                        reportId: pr.reportId,
+                        title: reportMap.get(pr.reportId?.toString())?.title || 'Unknown Report',
+                        sector: reportMap.get(pr.reportId?.toString())?.sector || 'N/A',
+                        uploadDate: reportMap.get(pr.reportId?.toString())?.uploadDate,
+                        description: reportMap.get(pr.reportId?.toString())?.description,
+                        purchaseDate: pr.purchaseDate,
+                        price: pr.price,
+                        accessType: pr.accessType
+                    }));
+                }
+
+                // Fetch payment requests for this user
+                const paymentRequests = await PaymentRequest.find({ user: user._id })
+                    .populate('report', 'title sector')
+                    .select('paymentType amount status createdAt report subscriptionPlan')
+                    .sort({ createdAt: -1 })
+                    .lean();
+
+                user.paymentRequests = paymentRequests.map(pr => ({
+                    _id: pr._id,
+                    paymentType: pr.paymentType,
+                    amount: pr.amount,
+                    status: pr.status,
+                    createdAt: pr.createdAt,
+                    report: pr.report || { title: pr.subscriptionPlan?.planName || 'Subscription' },
+                    subscriptionPlan: pr.subscriptionPlan
+                }));
+
+                return user;
+            })
+        );
+
+        res.status(200).json(usersWithReports);
+    } catch (error) {
+        console.error('Error fetching admin users:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 export default router;

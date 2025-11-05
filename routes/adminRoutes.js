@@ -8,6 +8,17 @@ import { sendAdminNotification } from '../services/adminNotificationService.js';
 
 const router = express.Router();
 
+// Middleware to verify admin
+const verifyAdmin = (req, res, next) => {
+    const isAdmin = req.header('x-admin-auth') === 'true';
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token || !isAdmin) {
+        return res.status(401).json({ error: 'Admin access required' });
+    }
+    next();
+};
+
 // Admin Dashboard Data
 router.get('/dashboard', async (req, res) => {
     try {
@@ -52,20 +63,70 @@ router.get('/dashboard', async (req, res) => {
 });
 
 // Get All Users for Admin
-router.get('/users', async (req, res) => {
+router.get('/users', verifyAdmin, async (req, res) => {
     try {
         const users = await User.find()
-            .populate({
-                path: 'purchasedReports.reportId',
-                select: 'title sector uploadDate'
-            })
-            .select('-password')
+            .select('-password -resetPasswordOTP -resetPasswordExpires')
             .lean();
 
-        res.status(200).json(users);
+        const usersWithDetails = await Promise.all(
+            users.map(async (user) => {
+                // Populate purchased reports with full details
+                if (user.purchasedReports && user.purchasedReports.length > 0) {
+                    const reportIds = user.purchasedReports.map(pr => pr.reportId).filter(id => id);
+                    const reports = await Report.find({ _id: { $in: reportIds } })
+                        .select('title sector uploadDate description reportType')
+                        .lean();
+                    
+                    const reportMap = new Map(reports.map(r => [r._id.toString(), r]));
+                    
+                    user.purchasedReports = user.purchasedReports.map(pr => {
+                        const report = reportMap.get(pr.reportId?.toString());
+                        return {
+                            _id: pr._id || pr.reportId,
+                            reportId: pr.reportId,
+                            title: report?.title || 'Unknown Report',
+                            sector: report?.sector || 'N/A',
+                            uploadDate: report?.uploadDate,
+                            description: report?.description,
+                            reportType: report?.reportType || 'premium',
+                            purchaseDate: pr.purchaseDate,
+                            price: pr.price,
+                            accessType: pr.accessType
+                        };
+                    });
+                } else {
+                    user.purchasedReports = [];
+                }
+
+                // Fetch and populate payment requests
+                const paymentRequests = await PaymentRequest.find({ user: user._id })
+                    .populate('report', 'title sector')
+                    .select('paymentType amount status createdAt report subscriptionPlan')
+                    .sort({ createdAt: -1 })
+                    .lean();
+
+                user.paymentRequests = paymentRequests.map(pr => ({
+                    _id: pr._id,
+                    paymentType: pr.paymentType,
+                    amount: pr.amount,
+                    status: pr.status,
+                    createdAt: pr.createdAt,
+                    report: pr.report || { 
+                        title: pr.subscriptionPlan?.planName || 'Subscription Plan',
+                        sector: 'Subscription'
+                    },
+                    subscriptionPlan: pr.subscriptionPlan
+                }));
+
+                return user;
+            })
+        );
+
+        res.status(200).json(usersWithDetails);
     } catch (error) {
         console.error('Error fetching users for admin:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

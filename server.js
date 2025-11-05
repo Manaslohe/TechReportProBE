@@ -66,8 +66,7 @@ app.post('/api/contacts/email', async (req, res) => {
 // Routes
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
-app.use('/api', paymentRoutes);
-app.use('/api/contacts', contactRoutes);
+app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Health Check Route
