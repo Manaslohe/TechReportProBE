@@ -244,7 +244,7 @@ router.post('/:id/use-subscription', requireAuth, async (req, res) => {
 });
 
 // Get Single Report with Access Check
-router.get('/:id', verifyToken, async (req, res) => {
+router.get('/:id', async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -254,24 +254,35 @@ router.get('/:id', verifyToken, async (req, res) => {
             return res.status(404).json({ error: 'Report not found' });
         }
 
-        // If report is free, allow access
-        if (report.isFree) {
+        // Check if report is free (using reportType or legacy isFree)
+        const isFreeReport = report.reportType === 'free' || report.isFree === true;
+
+        // If report is free, allow access without any authentication
+        if (isFreeReport) {
             return res.status(200).json({
                 _id: report._id,
                 title: report.title,
                 description: report.description,
                 sector: report.sector,
                 uploadDate: report.uploadDate,
-                reportType: report.reportType || 'premium',
+                reportType: report.reportType || 'free',
                 isFree: true,
                 userAccess: { hasAccess: true, accessType: 'free' }
             });
         }
 
-        // If user is authenticated, check their access
+        // For paid reports, check authentication
+        const token = req.header('Authorization')?.replace('Bearer ', '');
         let userAccess = { hasAccess: false };
-        if (req.user) {
-            userAccess = await checkReportAccess(req.user.id, id, report.reportType || 'premium');
+        
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                userAccess = await checkReportAccess(decoded.id, id, report.reportType || 'premium');
+            } catch (error) {
+                // Invalid token, but still return report info
+                userAccess = { hasAccess: false };
+            }
         }
 
         // Return report with access information
@@ -297,36 +308,6 @@ router.get('/:id', verifyToken, async (req, res) => {
 router.get('/:id/pdf', async (req, res) => {
     const { id } = req.params;
 
-    // Helper to extract token from header, query, or cookie
-    const getToken = (req) => {
-        // 1) Authorization header
-        let t = req.header('Authorization');
-        if (t && typeof t === 'string') {
-            t = t.replace(/^Bearer\s+/i, '').trim();
-            if (t) return t;
-        }
-
-        // 2) token query param (embed/iframe)
-        const q = typeof req.query.token === 'string' ? req.query.token.trim() : '';
-        if (q) {
-            return q.replace(/^Bearer\s+/i, '').trim();
-        }
-
-        // 3) authToken cookie (if available)
-        const rawCookie = req.headers.cookie || '';
-        const cookies = Object.fromEntries(
-            rawCookie.split(';').map(c => {
-                const [k, ...v] = c.trim().split('=');
-                return [k, decodeURIComponent((v || []).join('='))];
-            })
-        );
-        if (cookies.authToken) {
-            return cookies.authToken.replace(/^Bearer\s+/i, '').trim();
-        }
-
-        return null;
-    };
-
     try {
         const report = await Report.findById(id);
 
@@ -334,17 +315,47 @@ router.get('/:id/pdf', async (req, res) => {
             return res.status(404).json({ error: 'Report not found or file missing' });
         }
 
-        // If report is free, allow access without authentication
-        if (report.isFree) {
+        // Check if report is free (using reportType or legacy isFree)
+        const isFreeReport = report.reportType === 'free' || report.isFree === true;
+
+        // If report is free, serve it directly without any authentication
+        if (isFreeReport) {
             res.set({
                 'Content-Type': report.pdf.contentType,
                 'Content-Length': report.pdf.size,
                 'Content-Disposition': `inline; filename="${report.pdf.name}"`,
+                'Cache-Control': 'public, max-age=3600'
             });
             return res.send(report.pdf.data);
         }
 
-        // For paid reports, require authentication (via header, query token, or cookie)
+        // For paid reports, require authentication
+        const getToken = (req) => {
+            let t = req.header('Authorization');
+            if (t && typeof t === 'string') {
+                t = t.replace(/^Bearer\s+/i, '').trim();
+                if (t) return t;
+            }
+
+            const q = typeof req.query.token === 'string' ? req.query.token.trim() : '';
+            if (q) {
+                return q.replace(/^Bearer\s+/i, '').trim();
+            }
+
+            const rawCookie = req.headers.cookie || '';
+            const cookies = Object.fromEntries(
+                rawCookie.split(';').map(c => {
+                    const [k, ...v] = c.trim().split('=');
+                    return [k, decodeURIComponent((v || []).join('='))];
+                })
+            );
+            if (cookies.authToken) {
+                return cookies.authToken.replace(/^Bearer\s+/i, '').trim();
+            }
+
+            return null;
+        };
+
         const token = getToken(req);
         if (!token) {
             return res.status(401).json({ code: 'AUTH_REQUIRED', error: 'Access denied' });
@@ -365,23 +376,30 @@ router.get('/:id/pdf', async (req, res) => {
             // If accessing via subscription, deduct report count
             if (access.accessType === 'subscription') {
                 const user = await User.findById(decoded.id);
-                const success = user.useReport(access.reportType);
                 
-                if (!success) {
-                    return res.status(403).json({ 
-                        code: 'NO_REPORTS_LEFT', 
-                        error: 'No reports left in your subscription' 
+                const alreadyAccessed = user.purchasedReports.some(
+                    pr => pr.reportId.toString() === id && pr.accessType === 'subscription'
+                );
+
+                if (!alreadyAccessed) {
+                    const success = user.useReport(access.reportType);
+                    
+                    if (!success) {
+                        return res.status(403).json({ 
+                            code: 'NO_REPORTS_LEFT', 
+                            error: 'No reports left in your subscription' 
+                        });
+                    }
+
+                    user.purchasedReports.push({
+                        reportId: id,
+                        purchaseDate: new Date(),
+                        price: 0,
+                        accessType: 'subscription'
                     });
+
+                    await user.save();
                 }
-
-                user.purchasedReports.push({
-                    reportId: id,
-                    purchaseDate: new Date(),
-                    price: 0,
-                    accessType: 'subscription'
-                });
-
-                await user.save();
             }
 
             res.set({
