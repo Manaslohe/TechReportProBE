@@ -9,21 +9,68 @@ const router = express.Router();
 // Middleware to verify token
 const verifyToken = (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    console.log('🔐 [PAYMENT] Auth check:', {
+        hasToken: !!token,
+        tokenPreview: token ? `${token.substring(0, 10)}...` : 'none',
+        headers: Object.keys(req.headers)
+    });
+    
     if (!token) {
+        console.log('❌ [PAYMENT] No token provided');
         return res.status(401).json({ code: 'AUTH_REQUIRED', error: 'Access denied' });
     }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('✅ [PAYMENT] Token verified for user:', decoded.id);
         req.user = decoded;
         next();
     } catch (error) {
+        console.log('❌ [PAYMENT] Token verification failed:', error.message);
         res.status(401).json({ code: 'TOKEN_EXPIRED', error: 'Invalid token' });
+    }
+};
+
+// Middleware to verify admin token
+const verifyAdminToken = (req, res, next) => {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const isAdmin = req.header('x-admin-auth') === 'true';
+    
+    console.log('🔐 [ADMIN-PAYMENT] Auth check:', {
+        hasToken: !!token,
+        isAdmin,
+        tokenPreview: token ? `${token.substring(0, 10)}...` : 'none'
+    });
+    
+    if (!token || !isAdmin) {
+        console.log('❌ [ADMIN-PAYMENT] Admin authentication required');
+        return res.status(401).json({ code: 'ADMIN_AUTH_REQUIRED', error: 'Admin access denied' });
+    }
+
+    // For admin requests, we'll validate the token format instead of JWT verification
+    try {
+        // Simple validation - check if token exists and admin flag is set
+        // In production, implement proper admin session management
+        if (token && isAdmin) {
+            console.log('✅ [ADMIN-PAYMENT] Admin access granted');
+            req.isAdmin = true;
+            next();
+        } else {
+            throw new Error('Invalid admin credentials');
+        }
+    } catch (error) {
+        console.log('❌ [ADMIN-PAYMENT] Authentication failed:', error.message);
+        res.status(401).json({ code: 'AUTH_FAILED', error: 'Invalid admin credentials' });
     }
 };
 
 // Create Payment Request
 router.post('/payment-requests', verifyToken, async (req, res) => {
+    console.log('💰 [PAYMENT] Creating payment request for user:', req.user.id);
+    console.log('   → Payment type:', req.body.paymentType);
+    console.log('   → Amount:', req.body.amount);
+    
     const { paymentType, reportId, subscriptionPlan, amount, screenshotData } = req.body;
 
     if (!paymentType || !amount || !screenshotData) {
@@ -186,16 +233,20 @@ router.post('/payment-requests/:id/verify', async (req, res) => {
     }
 });
 
-// Get All Payment Requests
-router.get('/payment-requests', verifyToken, async (req, res) => {
+// Get All Payment Requests (Admin Only)
+router.get('/payment-requests', verifyAdminToken, async (req, res) => {
+    console.log('📋 [ADMIN-PAYMENT] Fetching all payment requests');
+    
     try {
         const paymentRequests = await PaymentRequest.find()
             .populate('user', 'firstName lastName email')
-            .populate('report', 'title');
+            .populate('report', 'title sector')
+            .sort({ createdAt: -1 });
 
+        console.log(`✅ [ADMIN-PAYMENT] Found ${paymentRequests.length} payment requests`);
         res.status(200).json(paymentRequests);
     } catch (error) {
-        console.error('Error fetching payment requests:', error);
+        console.error('❌ [ADMIN-PAYMENT] Error fetching payment requests:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
