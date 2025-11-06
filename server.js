@@ -25,15 +25,14 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
     'https://marketmindsresearch.com'
 ];
 
+// Improved CORS error logging
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, Postman, curl)
-        if (!origin) return callback(null, true);
-        
+        if (!origin) return callback(null, true); // Allow requests with no origin
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            console.log('❌ [CORS] Blocked origin:', origin);
+            console.error(`❌ [CORS] Blocked origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -97,7 +96,8 @@ mongoose.connect(DB_URI, {
     });
 })
 .catch((error) => {
-    console.error('❌ Error connecting to MongoDB:', error);
+    console.error('❌ Error connecting to MongoDB:', error.message);
+    console.error('   → Full error:', error);
 });
 
 export default app;
