@@ -70,6 +70,10 @@ const paymentRequestSchema = new mongoose.Schema({
   reviewedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  isAdminGrant: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

@@ -276,4 +276,91 @@ router.post('/payment-requests/:id/notify', async (req, res) => {
     }
 });
 
+// Admin Grant Access - Create payment request on behalf of user (pending approval)
+router.post('/grant-access', verifyAdmin, async (req, res) => {
+    try {
+        const { userId, paymentType, reportId, subscriptionPlan, amount, screenshotData, isAdminGrant } = req.body;
+
+        if (!userId || !paymentType || !amount || !screenshotData) {
+            return res.status(400).json({ error: 'All fields are required' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Validation based on payment type
+        if (paymentType === 'report') {
+            if (!reportId) {
+                return res.status(400).json({ error: 'Report ID is required' });
+            }
+
+            const report = await Report.findById(reportId);
+            if (!report) {
+                return res.status(404).json({ error: 'Report not found' });
+            }
+
+            // Check if already purchased
+            const alreadyPurchased = user.purchasedReports.some(
+                pr => pr.reportId.toString() === reportId
+            );
+            if (alreadyPurchased) {
+                return res.status(400).json({ error: 'User already has access to this report' });
+            }
+
+            // Check for pending request
+            const pendingRequest = await PaymentRequest.findOne({
+                user: userId,
+                report: reportId,
+                status: 'pending'
+            });
+            if (pendingRequest) {
+                return res.status(400).json({ error: 'Pending request already exists for this report' });
+            }
+
+        } else if (paymentType === 'subscription') {
+            if (!subscriptionPlan) {
+                return res.status(400).json({ error: 'Subscription plan is required' });
+            }
+
+            if (user.hasActiveSubscription()) {
+                return res.status(400).json({ error: 'User already has an active subscription' });
+            }
+
+            // Check for pending subscription request
+            const pendingRequest = await PaymentRequest.findOne({
+                user: userId,
+                paymentType: 'subscription',
+                status: 'pending'
+            });
+            if (pendingRequest) {
+                return res.status(400).json({ error: 'Pending subscription request already exists' });
+            }
+        }
+
+        // Create payment request (pending status - requires approval)
+        const paymentRequest = new PaymentRequest({
+            user: userId,
+            paymentType,
+            ...(paymentType === 'report' && { report: reportId }),
+            ...(paymentType === 'subscription' && { subscriptionPlan }),
+            amount,
+            screenshotData,
+            status: 'pending',
+            isAdminGrant: true
+        });
+
+        await paymentRequest.save();
+
+        res.status(201).json({
+            message: 'Access request submitted for approval',
+            paymentRequest
+        });
+    } catch (error) {
+        console.error('Error creating access request:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 export default router;
