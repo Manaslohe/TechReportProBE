@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Report from '../models/Report.js';
 import PaymentRequest from '../models/PaymentRequest.js'; // ADD this import
-import { sendWelcomeEmail, sendOTPEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
+import { sendWelcomeEmail, sendPasswordResetSuccessEmail } from '../services/emailService.js';
+import { sendOTPEmail } from '../services/otpEmailService.js';
 
 const router = express.Router();
 

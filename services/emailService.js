@@ -61,6 +61,15 @@ const mailTransporter = createTransporter();
 const htmlEscape = (s = '') =>
 	String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Resolve frontend base URL from env, preferring FRONTEND_URL, then DOMAIN
+const getFrontendUrl = () => {
+	const envUrl = (process.env.FRONTEND_URL || '').trim();
+	if (envUrl) return envUrl.replace(/\/+$/, '');
+	const domain = (process.env.DOMAIN || '').trim();
+	if (domain) return `https://www.${domain}`;
+	return 'https://www.marketmindsresearch.com';
+};
+
 // Build welcome email HTML
 const buildWelcomeEmailHtml = ({ firstName, lastName }) => {
 	const fullName = `${firstName} ${lastName}`.trim();
@@ -504,7 +513,7 @@ const buildSubscriptionExpiryEmailHtml = ({ firstName, lastName, planName, expir
 					
 					<!-- Renewal Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="${process.env.FRONTEND_URL}/plans" 
+						<a href="${getFrontendUrl()}/plans" 
 						   style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							Renew Subscription
 						</a>
@@ -558,7 +567,7 @@ const buildSubscriptionExpiryWarningEmailHtml = ({ firstName, lastName, planName
 					
 					<!-- Renewal Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="${process.env.FRONTEND_URL}/plans" 
+						<a href="${getFrontendUrl()}/plans" 
 						   style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
 							Renew Now
 						</a>
@@ -636,35 +645,7 @@ export const sendWelcomeEmail = async ({ email, firstName, lastName }) => {
 };
 
 // Send OTP email - HIGHEST PRIORITY
-export const sendOTPEmail = async ({ email, firstName, lastName, otp }) => {
-	try {
-		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds Research';
-		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
-
-		if (!fromEmail) {
-			throw new Error('SMTP_USER not configured');
-		}
-
-		const mailOptions = {
-			from: `"${fromName}" <${fromEmail}>`,
-			to: email,
-			subject: '🔐 Password Reset Code - MarketMinds',
-			html: buildOTPEmailHtml({ firstName, lastName, otp }),
-			// HIGHEST priority for OTP
-			priority: 'high',
-			headers: {
-				'X-Priority': '1',
-				'Importance': 'high',
-				'X-MSMail-Priority': 'High'
-			}
-		};
-
-		return await sendMailFast(mailOptions, 'OTP');
-	} catch (error) {
-		console.error('❌ [OTP EMAIL] Error:', error.message);
-		throw error;
-	}
-};
+// NOTE: OTP emails are now handled by services/otpEmailService.js for speed and isolation.
 
 // Send password reset success email
 export const sendPasswordResetSuccessEmail = async ({ email, firstName, lastName }) => {
@@ -749,53 +730,47 @@ export const sendContactEmail = async ({ name, email, phone, country, message })
 
 // Send subscription expiry email
 export const sendSubscriptionExpiryEmail = async ({ email, firstName, lastName, planName, expiryDate }) => {
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Your MarketMinds Subscription Has Expired',
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #f59e0b;">Subscription Expired</h2>
-                <p>Dear ${firstName} ${lastName},</p>
-                <p>Your <strong>${planName}</strong> subscription expired on ${new Date(expiryDate).toLocaleDateString()}.</p>
-                <p>To continue accessing premium reports, please renew your subscription.</p>
-                <a href="${process.env.FRONTEND_URL}/plans" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                    Renew Subscription
-                </a>
-                <p>Thank you for being with us!</p>
-            </div>
-        `
-    };
+	try {
+		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
-    return transporter.sendMail(mailOptions);
+		const mailOptions = {
+			from: `"${fromName}" <${fromEmail}>`,
+			to: email,
+			subject: 'Your MarketMinds Subscription Has Expired',
+			html: buildSubscriptionExpiryEmailHtml({ firstName, lastName, planName, expiryDate })
+		};
+
+		return await sendMailFast(mailOptions, 'SUBSCRIPTION-EXPIRED');
+	} catch (error) {
+		console.error('❌ [SUBSCRIPTION EXPIRED EMAIL] Error:', error.message);
+		throw error;
+	}
 };
 
 // Send subscription expiry warning email
 export const sendSubscriptionExpiryWarningEmail = async ({ email, firstName, lastName, planName, expiryDate, daysLeft }) => {
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: `Your MarketMinds Subscription Expires in ${daysLeft} Days`,
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #f59e0b;">Subscription Expiring Soon</h2>
-                <p>Dear ${firstName} ${lastName},</p>
-                <p>Your <strong>${planName}</strong> subscription will expire in <strong>${daysLeft} days</strong> on ${new Date(expiryDate).toLocaleDateString()}.</p>
-                <p>Renew now to ensure uninterrupted access to premium reports.</p>
-                <a href="${process.env.FRONTEND_URL}/plans" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                    Renew Now
-                </a>
-            </div>
-        `
-    };
+	try {
+		const fromName = process.env.MAIL_FROM_NAME || 'MarketMinds';
+		const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
 
-    return transporter.sendMail(mailOptions);
+		const mailOptions = {
+			from: `"${fromName}" <${fromEmail}>`,
+			to: email,
+			subject: `Your MarketMinds Subscription Expires in ${daysLeft} Days`,
+			html: buildSubscriptionExpiryWarningEmailHtml({ firstName, lastName, planName, expiryDate, daysLeft })
+		};
+
+		return await sendMailFast(mailOptions, 'SUBSCRIPTION-WARNING');
+	} catch (error) {
+		console.error('❌ [SUBSCRIPTION WARNING EMAIL] Error:', error.message);
+		throw error;
+	}
 };
 
 export default {
 	sendWelcomeEmail,
 	sendContactEmail,
-	sendOTPEmail,
 	sendPasswordResetSuccessEmail,
 	sendPurchaseApprovalEmail,
 	sendSubscriptionReportAccessEmail,

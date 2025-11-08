@@ -17,128 +17,159 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const DB_URI = process.env.DB_URI;
 
-// CORS Configuration - Updated for production
-const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'https://www.marketmindsresearch.com',
-    'https://marketmindsresearch.com'
-];
+// Allowed origins (prefer environment variable ALLOWED_ORIGINS)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+  : [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:3000',
+      'https://www.marketmindsresearch.com',
+      'https://marketmindsresearch.com'
+    ]
+);
 
+// CORS
 app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.log('🚫 [CORS] Blocked origin:', origin);
-            callback(null, true); // Allow for now, change to callback(new Error('Not allowed by CORS')) in production
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-auth', 'Accept'],
-    exposedHeaders: ['Content-Length', 'Content-Type'],
-    maxAge: 86400, // 24 hours
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // Postman / curl
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    console.log('🚫 [CORS] Blocked origin:', origin);
+    return cb(null, true); // Change to cb(new Error('Not allowed by CORS')) to enforce
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','x-admin-auth','Accept'],
+  exposedHeaders: ['Content-Length','Content-Type'],
+  maxAge: 86400
 }));
+// Note: Express 5 (path-to-regexp v8) no longer supports "*" path patterns.
+// The global CORS middleware above already handles preflight OPTIONS requests,
+// so we don't need an explicit app.options('*', cors()) here.
 
-// Handle preflight requests explicitly
-app.options('*', cors());
-
-// Body parsing middleware
+// Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Logging middleware
+// Logging
 app.use(morgan('dev'));
 
-// Request logging for debugging
+// Simple request log
 app.use((req, res, next) => {
-    console.log(`📝 [${new Date().toISOString()}] ${req.method} ${req.path}`);
-    console.log(`   → Origin: ${req.headers.origin || 'No origin'}`);
-    next();
+  console.log(`📝 ${req.method} ${req.originalUrl} | Origin: ${req.headers.origin || 'n/a'}`);
+  next();
 });
 
-// Email route
-app.post('/api/contacts/email', async (req, res) => {
-    try {
-        const { name, email, phone, country, message } = req.body || {};
-        if (!name || !email || !message) {
-            return res.status(400).json({ error: 'Name, email, and message are required.' });
-        }
-
-        await sendContactEmail({ name, email, phone, country, message });
-        return res.status(200).json({ success: true, message: 'Message sent' });
-    } catch (err) {
-        console.error('Send mail error:', err?.message || err);
-        return res.status(500).json({ error: 'Failed to send message' });
+// Helper: prevent absolute URL paths inside route modules
+const sanitizeRouterPaths = (router, tag) => {
+  if (!router || !router.stack) return;
+  router.stack.forEach(layer => {
+    if (layer.route && typeof layer.route.path === 'string') {
+      const p = layer.route.path;
+      if (p.includes('://')) {
+        console.warn(`⚠️ [ROUTE-SANITIZE] ${tag} had absolute path "${p}". Replacing with "/"`);
+        layer.route.path = '/';
+      } else if (/^https:/.test(p)) {
+        console.warn(`⚠️ [ROUTE-SANITIZE] ${tag} bad path "${p}".`);
+        layer.route.path = '/';
+      }
     }
+  });
+};
+
+// Safe mount wrapper that catches path-to-regexp errors
+const safeMount = (base, router, tag) => {
+  try {
+    sanitizeRouterPaths(router, tag);
+    app.use(base, router);
+  } catch (err) {
+    console.error(`❌ [MOUNT ERROR] Failed mounting ${tag} at ${base}:`, err.message);
+  }
+};
+
+// Contact email direct endpoint
+app.post('/api/contacts/email', async (req, res) => {
+  try {
+    const { name, email, phone, country, message } = req.body || {};
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'Name, email, and message are required.' });
+    }
+    await sendContactEmail({ name, email, phone, country, message });
+    return res.status(200).json({ success: true, message: 'Message sent' });
+  } catch (err) {
+    console.error('❌ [CONTACT EMAIL] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
 });
 
-// API Routes
-app.use('/api/users', userRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api', paymentRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/admin', adminRoutes);
+// Mount routers (use safeMount)
+safeMount('/api/users', userRoutes, 'userRoutes');
+safeMount('/api/reports', reportRoutes, 'reportRoutes');
+safeMount('/api', paymentRoutes, 'paymentRoutes');
+safeMount('/api/contacts', contactRoutes, 'contactRoutes');
+safeMount('/api/admin', adminRoutes, 'adminRoutes');
 
-// Health Check Route
+// Debug: list final registered top-level paths
+setImmediate(() => {
+  try {
+    const routerStack = app?._router?.stack;
+    if (!Array.isArray(routerStack)) {
+      console.log('🔍 Registered routes: (router stack unavailable)');
+      return;
+    }
+    console.log('🔍 Registered routes:');
+    routerStack
+      .filter(l => l.route && l.route.path)
+      .forEach(l => {
+        const methods = Object.keys(l.route.methods).join(',').toUpperCase();
+        console.log(`   ${methods.padEnd(8)} ${l.route.path}`);
+      });
+  } catch (e) {
+    console.warn('⚠️ [ROUTE LIST] Could not enumerate routes:', e.message);
+  }
+});
+
+// Health
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'Server is running', 
-        timestamp: new Date(),
-        environment: process.env.NODE_ENV || 'development'
-    });
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date(),
+    env: process.env.NODE_ENV || 'development'
+  });
 });
 
-// Root route
+// Root
 app.get('/', (req, res) => {
-    res.status(200).json({ 
-        message: 'MarketMinds API Server',
-        version: '1.0.0',
-        status: 'active'
-    });
+  res.status(200).json({
+    message: 'MarketMinds API',
+    version: '1.0.0',
+    status: 'running'
+  });
 });
 
-// Error Handling Middleware
-app.use((req, res, next) => {
-    console.log(`❌ [404] Route not found: ${req.method} ${req.path}`);
-    res.status(404).json({ error: 'Route not found' });
+// 404
+app.use((req, res) => {
+  console.log(`❌ [404] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: 'Route not found' });
 });
 
+// Error handler
 app.use((err, req, res, next) => {
-    console.error('❌ [ERROR]:', err.message);
-    console.error('   → Stack:', err.stack);
-    res.status(500).json({ error: 'Internal Server Error' });
+  console.error('❌ [ERROR]', err.message);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// Connect to MongoDB
-mongoose.connect(DB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-.then(() => {
-    console.log('✅ MongoDB connected');
-    
-    // Start server
-    app.listen(PORT, () => {
-        console.log(`🚀 Server is running on port ${PORT}`);
-        console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`   → CORS Origins: ${allowedOrigins.join(', ')}`);
-    });
-    
-    // Start cron jobs
-    startSubscriptionExpiryCheck();
-})
-.catch((error) => {
-    console.error('❌ Error connecting to MongoDB:', error.message);
-    console.error('   → Full error:', error);
-    process.exit(1);
+// Mongo + start
+mongoose.connect(DB_URI).then(() => {
+  console.log('✅ MongoDB connected');
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ')}`);
+  });
+  startSubscriptionExpiryCheck();
+}).catch(err => {
+  console.error('❌ Mongo connection error:', err.message);
+  process.exit(1);
 });
 
 export default app;

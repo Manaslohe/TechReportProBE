@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import User from '../models/User.js';
-import { sendSubscriptionExpiryEmail } from '../services/emailService.js';
+import { sendSubscriptionExpiryEmail, sendSubscriptionExpiryWarningEmail } from '../services/emailService.js';
 
 // Run every day at midnight
 export const startSubscriptionExpiryCheck = () => {
@@ -20,22 +20,27 @@ export const startSubscriptionExpiryCheck = () => {
 
             for (const user of users) {
                 // Deactivate subscription
-                user.currentSubscription.isActive = false;
-                user.subscriptionHistory.push(user.currentSubscription);
+                const prev = user.currentSubscription ? { ...user.currentSubscription.toObject?.() || user.currentSubscription } : null;
+                if (user.currentSubscription) {
+                    user.currentSubscription.isActive = false;
+                    user.subscriptionHistory.push(user.currentSubscription);
+                }
                 user.currentSubscription = null;
-                
+
                 await user.save();
 
                 // Send expiry notification email
-                sendSubscriptionExpiryEmail({
+                if (prev) {
+                  sendSubscriptionExpiryEmail({
                     email: user.email,
                     firstName: user.firstName,
                     lastName: user.lastName,
-                    planName: user.currentSubscription.planName,
-                    expiryDate: user.currentSubscription.expiryDate
-                }).catch(err => {
+                    planName: prev.planName,
+                    expiryDate: prev.expiryDate
+                  }).catch(err => {
                     console.error('Failed to send expiry email:', err);
-                });
+                  });
+                }
 
                 console.log(`✅ [CRON] Deactivated subscription for user: ${user.email}`);
             }
