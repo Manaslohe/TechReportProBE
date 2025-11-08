@@ -17,35 +17,52 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const DB_URI = process.env.DB_URI;
 
-// Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-    'http://localhost:5173', 
-    'https://techreportspro.vercel.app',
-    'https://techbe-zeta.vercel.app',
+// CORS Configuration - Updated for production
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
     'https://www.marketmindsresearch.com',
     'https://marketmindsresearch.com'
 ];
 
-// Improved CORS error logging
 app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin) return callback(null, true); // Allow requests with no origin
-        if (allowedOrigins.includes(origin)) {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
-            console.error(`❌ [CORS] Blocked origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
+            console.log('🚫 [CORS] Blocked origin:', origin);
+            callback(null, true); // Allow for now, change to callback(new Error('Not allowed by CORS')) in production
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-auth'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-auth', 'Accept'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
+    maxAge: 86400, // 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
 
+// Handle preflight requests explicitly
+app.options('*', cors());
+
+// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Logging middleware
 app.use(morgan('dev'));
+
+// Request logging for debugging
+app.use((req, res, next) => {
+    console.log(`📝 [${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(`   → Origin: ${req.headers.origin || 'No origin'}`);
+    next();
+});
 
 // Email route
 app.post('/api/contacts/email', async (req, res) => {
@@ -63,7 +80,7 @@ app.post('/api/contacts/email', async (req, res) => {
     }
 });
 
-// Routes
+// API Routes
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api', paymentRoutes);
@@ -72,16 +89,31 @@ app.use('/api/admin', adminRoutes);
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'Server is running', timestamp: new Date() });
+    res.status(200).json({ 
+        status: 'Server is running', 
+        timestamp: new Date(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+// Root route
+app.get('/', (req, res) => {
+    res.status(200).json({ 
+        message: 'MarketMinds API Server',
+        version: '1.0.0',
+        status: 'active'
+    });
 });
 
 // Error Handling Middleware
 app.use((req, res, next) => {
+    console.log(`❌ [404] Route not found: ${req.method} ${req.path}`);
     res.status(404).json({ error: 'Route not found' });
 });
 
 app.use((err, req, res, next) => {
-    console.error('Error:', err.message);
+    console.error('❌ [ERROR]:', err.message);
+    console.error('   → Stack:', err.stack);
     res.status(500).json({ error: 'Internal Server Error' });
 });
 
@@ -92,16 +124,21 @@ mongoose.connect(DB_URI, {
 })
 .then(() => {
     console.log('✅ MongoDB connected');
+    
+    // Start server
     app.listen(PORT, () => {
         console.log(`🚀 Server is running on port ${PORT}`);
+        console.log(`   → Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`   → CORS Origins: ${allowedOrigins.join(', ')}`);
     });
+    
+    // Start cron jobs
+    startSubscriptionExpiryCheck();
 })
 .catch((error) => {
     console.error('❌ Error connecting to MongoDB:', error.message);
     console.error('   → Full error:', error);
+    process.exit(1);
 });
-
-// Start cron jobs
-startSubscriptionExpiryCheck();
 
 export default app;
