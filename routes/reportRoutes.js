@@ -55,7 +55,7 @@ const checkReportAccess = async (userId, reportId, reportType = 'premium') => {
         return { hasAccess: true, accessType: 'individual' };
     }
 
-    // Check subscription access
+    // Check subscription access (this now handles expiry automatically)
     if (user.hasActiveSubscription()) {
         const availableReports = user.getAvailableReports();
         
@@ -68,7 +68,7 @@ const checkReportAccess = async (userId, reportId, reportType = 'premium') => {
         return { hasAccess: false, reason: 'No reports left in subscription' };
     }
 
-    return { hasAccess: false, reason: 'No active subscription or individual purchase' };
+    return { hasAccess: false, reason: 'Subscription expired or not active' };
 };
 
 // Upload Report

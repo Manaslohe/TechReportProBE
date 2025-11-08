@@ -9,6 +9,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { sendContactEmail } from './services/emailService.js';
+import { startSubscriptionExpiryCheck } from './utils/subscriptionCron.js';
 
 dotenv.config();
 
@@ -99,5 +100,8 @@ mongoose.connect(DB_URI, {
     console.error('❌ Error connecting to MongoDB:', error.message);
     console.error('   → Full error:', error);
 });
+
+// Start cron jobs
+startSubscriptionExpiryCheck();
 
 export default app;

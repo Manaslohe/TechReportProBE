@@ -149,18 +149,25 @@ router.get('/dashboard', verifyToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Check and update expired subscription
+        const hasActive = user.hasActiveSubscription();
+        if (!hasActive && user.currentSubscription && !user.currentSubscription.isActive) {
+            await user.save(); // Save the deactivated subscription
+        }
+
         // Get pending payment requests
         const pendingRequests = await PaymentRequest.find({
             user: req.user.id,
             status: 'pending'
         }).populate('report', 'title sector');
 
-        // Get subscription status
+        // Get subscription status with expiry check
         const subscriptionStatus = {
-            hasActive: user.hasActiveSubscription(),
+            hasActive: hasActive,
             current: user.currentSubscription,
-            availableReports: user.getAvailableReports(),
-            history: user.subscriptionHistory
+            availableReports: hasActive ? user.getAvailableReports() : { total: 0, premium: 0, bluechip: 0 },
+            history: user.subscriptionHistory,
+            isExpired: user.currentSubscription && !hasActive
         };
 
         // Prepare dashboard data
@@ -204,14 +211,22 @@ router.get('/subscription', verifyToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        const hasActive = user.hasActiveSubscription();
+        
+        // Save if subscription was deactivated
+        if (!hasActive && user.currentSubscription && !user.currentSubscription.isActive) {
+            await user.save();
+        }
+
         const subscriptionData = {
-            hasActive: user.hasActiveSubscription(),
+            hasActive: hasActive,
             current: user.currentSubscription,
-            availableReports: user.getAvailableReports(),
+            availableReports: hasActive ? user.getAvailableReports() : { total: 0, premium: 0, bluechip: 0 },
             expiryDate: user.currentSubscription?.expiryDate,
-            daysLeft: user.currentSubscription 
+            daysLeft: user.currentSubscription && hasActive
                 ? Math.max(0, Math.ceil((new Date(user.currentSubscription.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)))
-                : 0
+                : 0,
+            isExpired: user.currentSubscription && !hasActive
         };
 
         res.status(200).json(subscriptionData);

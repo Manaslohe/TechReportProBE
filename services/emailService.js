@@ -478,75 +478,94 @@ const buildPurchaseApprovalHtml = ({ firstName, lastName, purchaseType, itemName
 	`;
 };
 
-// Build subscription report access email HTML
-const buildSubscriptionReportAccessHtml = ({ firstName, lastName, reportTitle, reportSector, remainingReports }) => {
-	const fullName = `${firstName} ${lastName}`.trim();
+// Build subscription expiry email HTML
+const buildSubscriptionExpiryEmailHtml = ({ firstName, lastName, planName, expiryDate }) => {
 	return `
 		<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;background:#f6f9fc;padding:20px">
 			<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
 				<!-- Header -->
-				<div style="background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#fff;padding:40px 20px;text-align:center">
-					<div style="width:64px;height:64px;margin:0 auto 15px;background:#ffffff;border-radius:50%;display:flex;align-items:center;justify-content:center">
-						<span style="font-size:32px">📊</span>
-					</div>
-					<h1 style="margin:0;font-size:28px;font-weight:bold">Report Unlocked!</h1>
+				<div style="background:#dc2626;color:#fff;padding:40px 20px;text-align:center">
+					<h1 style="margin:0;font-size:28px;font-weight:bold">Subscription Expired</h1>
 				</div>
 				
 				<!-- Main content -->
 				<div style="padding:40px 30px">
 					<h2 style="color:#1f2937;font-size:22px;margin:0 0 20px 0;font-weight:600">
-						Hello ${htmlEscape(fullName)}! 🎉
+						Hello ${htmlEscape(firstName)} ${htmlEscape(lastName)}!
 					</h2>
 					
 					<p style="color:#4b5563;font-size:16px;line-height:1.8;margin:0 0 25px 0">
-						Great news! You've successfully unlocked a new report using your subscription.
+						We're sorry to inform you that your subscription for the plan <strong>${htmlEscape(planName)}</strong> has expired on ${new Date(expiryDate).toLocaleDateString()}.
 					</p>
 					
-					<!-- Report Details -->
-					<div style="background:#f3f4f6;border-radius:12px;padding:25px;margin:0 0 30px 0;border:2px solid #e5e7eb">
-						<h3 style="color:#1f2937;font-size:18px;margin:0 0 15px 0;font-weight:600">Report Details</h3>
-						<table style="width:100%;border-collapse:collapse">
-							<tr>
-								<td style="padding:8px 0;color:#666;font-weight:bold">Report Title</td>
-								<td style="padding:8px 0;color:#111">${htmlEscape(reportTitle)}</td>
-							</tr>
-							<tr>
-								<td style="padding:8px 0;color:#666;font-weight:bold">Sector</td>
-								<td style="padding:8px 0;color:#111">${htmlEscape(reportSector)}</td>
-							</tr>
-							<tr>
-								<td style="padding:8px 0;color:#666;font-weight:bold">Access Type</td>
-								<td style="padding:8px 0;color:#111">Via Subscription</td>
-							</tr>
-						</table>
-					</div>
+					<p style="color:#4b5563;font-size:16px;line-height:1.8;margin:0 0 25px 0">
+						To continue enjoying our premium reports and features, please renew your subscription at the earliest.
+					</p>
 					
-					<div style="background:#dbeafe;border-left:4px solid #0b5bd3;padding:20px;margin:0 0 25px 0;border-radius:8px">
-						<p style="color:#1e40af;font-size:15px;margin:0 0 10px 0;font-weight:600">
-							📈 Subscription Status
-						</p>
-						<p style="color:#1e3a8a;font-size:14px;margin:0;line-height:1.6">
-							You have <strong>${remainingReports.total || 0} reports</strong> remaining in your subscription
-							<br/>
-							(${remainingReports.premium || 0} Premium + ${remainingReports.bluechip || 0} Bluechip)
-						</p>
-					</div>
-					
-					<!-- CTA Button -->
+					<!-- Renewal Button -->
 					<div style="text-align:center;margin:0 0 30px 0">
-						<a href="https://www.marketmindsresearch.com/dashboard" 
-						   style="display:inline-block;background:linear-gradient(135deg, #0b5bd3 0%, #1e40af 100%);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
-							View in Dashboard
+						<a href="${process.env.FRONTEND_URL}/plans" 
+						   style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
+							Renew Subscription
 						</a>
 					</div>
 					
 					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0;border-top:1px solid #e5e7eb;padding-top:20px">
-						All your accessed reports are available in your 
-						<a href="https://www.marketmindsresearch.com/dashboard" style="color:#0b5bd3;text-decoration:none;font-weight:600">Dashboard</a>.
+						Need assistance? Contact our support team at 
+						<a href="mailto:info.marketmindsresearch@gmail.com" style="color:#0b5bd3;text-decoration:none;font-weight:600">info.marketmindsresearch@gmail.com</a>
+					</p>
+				</div>
+				
+				<!-- Footer -->
+				<div style="background:#f9fafb;padding:20px 30px;text-align:center;border-top:1px solid #e5e7eb">
+					<p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
+						© ${new Date().getFullYear()} MarketMinds Research. All rights reserved.
+					</p>
+					<div style="margin:15px 0 0 0">
+						<a href="https://www.marketmindsresearch.com" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Website</a>
+						<span style="color:#d1d5db">|</span>
+						<a href="https://wa.me/917987090461" style="color:#0b5bd3;text-decoration:none;font-size:13px;margin:0 10px">Support</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	`;
+};
+
+// Build subscription expiry warning email HTML
+const buildSubscriptionExpiryWarningEmailHtml = ({ firstName, lastName, planName, expiryDate, daysLeft }) => {
+	return `
+		<div style="font-family:Arial,Helvetica,sans-serif;line-height:1.6;background:#f6f9fc;padding:20px">
+			<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
+				<!-- Header -->
+				<div style="background:#f59e0b;color:#fff;padding:40px 20px;text-align:center">
+					<h1 style="margin:0;font-size:28px;font-weight:bold">Subscription Expiring Soon</h1>
+				</div>
+				
+				<!-- Main content -->
+				<div style="padding:40px 30px">
+					<h2 style="color:#1f2937;font-size:22px;margin:0 0 20px 0;font-weight:600">
+						Hello ${htmlEscape(firstName)} ${htmlEscape(lastName)}!
+					</h2>
+					
+					<p style="color:#4b5563;font-size:16px;line-height:1.8;margin:0 0 25px 0">
+						This is a friendly reminder that your subscription for the plan <strong>${htmlEscape(planName)}</strong> will expire in <strong>${htmlEscape(daysLeft)} days</strong> on ${new Date(expiryDate).toLocaleDateString()}.
 					</p>
 					
-					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:15px 0 0 0">
-						Need help? Contact us at 
+					<p style="color:#4b5563;font-size:16px;line-height:1.8;margin:0 0 25px 0">
+						Renew now to ensure uninterrupted access to our premium reports and features.
+					</p>
+					
+					<!-- Renewal Button -->
+					<div style="text-align:center;margin:0 0 30px 0">
+						<a href="${process.env.FRONTEND_URL}/plans" 
+						   style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:600;font-size:16px;box-shadow:0 4px 6px rgba(11,91,211,0.3)">
+							Renew Now
+						</a>
+					</div>
+					
+					<p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0;border-top:1px solid #e5e7eb;padding-top:20px">
+						For any queries, feel free to contact our support team at 
 						<a href="mailto:info.marketmindsresearch@gmail.com" style="color:#0b5bd3;text-decoration:none;font-weight:600">info.marketmindsresearch@gmail.com</a>
 					</p>
 				</div>
@@ -728,11 +747,58 @@ export const sendContactEmail = async ({ name, email, phone, country, message })
 	}
 };
 
+// Send subscription expiry email
+export const sendSubscriptionExpiryEmail = async ({ email, firstName, lastName, planName, expiryDate }) => {
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Your MarketMinds Subscription Has Expired',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f59e0b;">Subscription Expired</h2>
+                <p>Dear ${firstName} ${lastName},</p>
+                <p>Your <strong>${planName}</strong> subscription expired on ${new Date(expiryDate).toLocaleDateString()}.</p>
+                <p>To continue accessing premium reports, please renew your subscription.</p>
+                <a href="${process.env.FRONTEND_URL}/plans" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+                    Renew Subscription
+                </a>
+                <p>Thank you for being with us!</p>
+            </div>
+        `
+    };
+
+    return transporter.sendMail(mailOptions);
+};
+
+// Send subscription expiry warning email
+export const sendSubscriptionExpiryWarningEmail = async ({ email, firstName, lastName, planName, expiryDate, daysLeft }) => {
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: `Your MarketMinds Subscription Expires in ${daysLeft} Days`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f59e0b;">Subscription Expiring Soon</h2>
+                <p>Dear ${firstName} ${lastName},</p>
+                <p>Your <strong>${planName}</strong> subscription will expire in <strong>${daysLeft} days</strong> on ${new Date(expiryDate).toLocaleDateString()}.</p>
+                <p>Renew now to ensure uninterrupted access to premium reports.</p>
+                <a href="${process.env.FRONTEND_URL}/plans" style="display: inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+                    Renew Now
+                </a>
+            </div>
+        `
+    };
+
+    return transporter.sendMail(mailOptions);
+};
+
 export default {
 	sendWelcomeEmail,
 	sendContactEmail,
 	sendOTPEmail,
 	sendPasswordResetSuccessEmail,
 	sendPurchaseApprovalEmail,
-	sendSubscriptionReportAccessEmail
+	sendSubscriptionReportAccessEmail,
+	sendSubscriptionExpiryEmail,
+	sendSubscriptionExpiryWarningEmail
 };

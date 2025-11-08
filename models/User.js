@@ -57,11 +57,31 @@ userSchema.pre('save', async function (next) {
     next();
 });
 
-// Method to check if user has active subscription
+// Check if user has active subscription
 userSchema.methods.hasActiveSubscription = function() {
-    if (!this.currentSubscription) return false;
-    return this.currentSubscription.isActive && 
-           this.currentSubscription.expiryDate > new Date();
+    if (!this.currentSubscription || !this.currentSubscription.isActive) {
+        return false;
+    }
+    
+    const now = new Date();
+    const expiryDate = new Date(this.currentSubscription.expiryDate);
+    
+    // If expired, deactivate and move to history
+    if (now > expiryDate) {
+        this.deactivateExpiredSubscription();
+        return false;
+    }
+    
+    return true;
+};
+
+// Deactivate expired subscription
+userSchema.methods.deactivateExpiredSubscription = function() {
+    if (this.currentSubscription) {
+        this.currentSubscription.isActive = false;
+        this.subscriptionHistory.push(this.currentSubscription);
+        this.currentSubscription = null;
+    }
 };
 
 // Method to get available reports count
